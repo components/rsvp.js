@@ -1,7 +1,5 @@
 {
   "name": "rsvp",
-  "version": "1.2.0",
-  "main": "./rsvp.js",
-  "dependencies": {
-  }
+  "version": "2.0.1",
+  "main": "./rsvp.js"
 }
