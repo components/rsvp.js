@@ -894,7 +894,9 @@ define("rsvp/promise",
         instrument('created', this);
       }
 
-      invokeResolver(resolver, this);
+      if (noop !== resolver) {
+        invokeResolver(resolver, this);
+      }
     }
 
     function invokeResolver(resolver, promise) {
@@ -1618,6 +1620,17 @@ define("rsvp",
 
     function off() {
       config.off.apply(config, arguments);
+    }
+
+    // Set up instrumentation through `window.__PROMISE_INTRUMENTATION__`
+    if (typeof window !== 'undefined' && typeof window.__PROMISE_INSTRUMENTATION__ === 'object') {
+      var callbacks = window.__PROMISE_INSTRUMENTATION__;
+      configure('instrument', true);
+      for (var eventName in callbacks) {
+        if (callbacks.hasOwnProperty(eventName)) {
+          on(eventName, callbacks[eventName]);
+        }
+      }
     }
 
     __exports__.Promise = Promise;
