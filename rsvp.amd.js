@@ -1,12 +1,141 @@
+/**
+  @class RSVP
+  @module RSVP
+  */
 define("rsvp/all", 
   ["./promise","exports"],
   function(__dependency1__, __exports__) {
     "use strict";
     var Promise = __dependency1__["default"];
 
+    /**
+      This is a convenient alias for `RSVP.Promise.all`.
+
+      @method all
+      @static
+      @for RSVP
+      @param {Array} array Array of promises.
+      @param {String} label An optional label. This is useful
+      for tooling.
+    */
     __exports__["default"] = function all(array, label) {
       return Promise.all(array, label);
     };
+  });
+define("rsvp/all_settled", 
+  ["./promise","./utils","exports"],
+  function(__dependency1__, __dependency2__, __exports__) {
+    "use strict";
+    var Promise = __dependency1__["default"];
+    var isArray = __dependency2__.isArray;
+    var isNonThenable = __dependency2__.isNonThenable;
+
+    /**
+      `RSVP.allSettled` is similar to `RSVP.all`, but instead of implementing
+      a fail-fast method, it waits until all the promises have returned and
+      shows you all the results. This is useful if you want to handle multiple
+      promises' failure states together as a set.
+
+      Returns a promise that is fulfilled when all the given promises have been
+      settled. The return promise is fulfilled with an array of the states of
+      the promises passed into the `promises` array argument.
+
+      Each state object will either indicate fulfillment or rejection, and
+      provide the corresponding value or reason. The states will take one of
+      the following formats:
+
+      ```javascript
+      { state: 'fulfilled', value: value }
+        or
+      { state: 'rejected', reason: reason }
+      ```
+
+      Example:
+
+      ```javascript
+      var promise1 = RSVP.Promise.resolve(1);
+      var promise2 = RSVP.Promise.reject(new Error('2'));
+      var promise3 = RSVP.Promise.reject(new Error('3'));
+      var promises = [ promise1, promise2, promise3 ];
+
+      RSVP.allSettled(promises).then(function(array){
+        // array == [
+        //   { state: 'fulfilled', value: 1 },
+        //   { state: 'rejected', reason: Error },
+        //   { state: 'rejected', reason: Error }
+        // ]
+        // Note that for the second item, reason.message will be "2", and for the
+        // third item, reason.message will be "3".
+      }, function(error) {
+        // Not run. (This block would only be called if allSettled had failed,
+        // for instance if passed an incorrect argument type.)
+      });
+      ```
+
+      @method allSettled
+      @static
+      @for RSVP
+      @param {Array} promises
+      @param {String} label - optional string that describes the promise.
+      Useful for tooling.
+      @return {Promise} promise that is fulfilled with an array of the settled
+      states of the constituent promises.
+    */
+
+    __exports__["default"] = function allSettled(entries, label) {
+      return new Promise(function(resolve, reject) {
+        if (!isArray(entries)) {
+          throw new TypeError('You must pass an array to allSettled.');
+        }
+
+        var remaining = entries.length;
+        var entry;
+
+        if (remaining === 0) {
+          resolve([]);
+          return;
+        }
+
+        var results = new Array(remaining);
+
+        function fulfilledResolver(index) {
+          return function(value) {
+            resolveAll(index, fulfilled(value));
+          };
+        }
+
+        function rejectedResolver(index) {
+          return function(reason) {
+            resolveAll(index, rejected(reason));
+          };
+        }
+
+        function resolveAll(index, value) {
+          results[index] = value;
+          if (--remaining === 0) {
+            resolve(results);
+          }
+        }
+
+        for (var index = 0; index < entries.length; index++) {
+          entry = entries[index];
+
+          if (isNonThenable(entry)) {
+            resolveAll(index, fulfilled(entry));
+          } else {
+            Promise.resolve(entry).then(fulfilledResolver(index), rejectedResolver(index));
+          }
+        }
+      }, label);
+    };
+
+    function fulfilled(value) {
+      return { state: 'fulfilled', value: value };
+    }
+
+    function rejected(reason) {
+      return { state: 'rejected', reason: reason };
+    }
   });
 define("rsvp/asap", 
   ["exports"],
@@ -108,7 +237,7 @@ define("rsvp/defer",
     var Promise = __dependency1__["default"];
 
     /**
-      `RSVP.defer` returns an object similar to jQuery's `$.Deferred` objects.
+      `RSVP.defer` returns an object similar to jQuery's `$.Deferred`.
       `RSVP.defer` should be used when porting over code reliant on `$.Deferred`'s
       interface. New code should use the `RSVP.Promise` constructor instead.
 
@@ -133,8 +262,10 @@ define("rsvp/defer",
        ```
 
       @method defer
+      @static
       @for RSVP
-      @param {String} -
+      @param {String} label optional string for labeling the promise.
+      Useful for tooling.
       @return {Object}
      */
 
@@ -172,13 +303,11 @@ define("rsvp/events",
     };
 
     /**
-      //@module RSVP
-      //@class EventTarget
+      @class RSVP.EventTarget
     */
     __exports__["default"] = {
 
       /**
-        @private
         `RSVP.EventTarget.mixin` extends an object with EventTarget methods. For
         Example:
 
@@ -216,6 +345,8 @@ define("rsvp/events",
         ```
 
         @method mixin
+        @for RSVP.EventTarget
+        @private
         @param {Object} object object to extend with EventTarget methods
       */
       mixin: function(object) {
@@ -227,8 +358,6 @@ define("rsvp/events",
       },
 
       /**
-        @private
-
         Registers a callback to be executed when `eventName` is triggered
 
         ```javascript
@@ -240,6 +369,8 @@ define("rsvp/events",
         ```
 
         @method on
+        @for RSVP.EventTarget
+        @private
         @param {String} eventName name of the event to listen for
         @param {Function} callback function to be called when the event is triggered.
       */
@@ -258,8 +389,6 @@ define("rsvp/events",
       },
 
       /**
-        @private
-
         You can use `off` to stop firing a particular callback for an event:
 
         ```javascript
@@ -290,6 +419,8 @@ define("rsvp/events",
         ```
 
         @method off
+        @for RSVP.EventTarget
+        @private
         @param {String} eventName event to stop listening to
         @param {Function} callback optional argument. If given, only the function
         given will be removed from the event's callback queue. If no `callback`
@@ -312,8 +443,6 @@ define("rsvp/events",
       },
 
       /**
-        @private
-
         Use `trigger` to fire custom events. For example:
 
         ```javascript
@@ -337,6 +466,8 @@ define("rsvp/events",
         ```
 
         @method trigger
+        @for RSVP.EventTarget
+        @private
         @param {String} eventName name of the event to be triggered
         @param {Any} options optional value to be passed to any event handlers for
         the given `eventName`
@@ -357,18 +488,16 @@ define("rsvp/events",
     };
   });
 define("rsvp/filter", 
-  ["./all","./map","./utils","exports"],
-  function(__dependency1__, __dependency2__, __dependency3__, __exports__) {
+  ["./promise","./utils","exports"],
+  function(__dependency1__, __dependency2__, __exports__) {
     "use strict";
-    var all = __dependency1__["default"];
-    var map = __dependency2__["default"];
-    var isFunction = __dependency3__.isFunction;
-    var isArray = __dependency3__.isArray;
+    var Promise = __dependency1__["default"];
+    var isFunction = __dependency2__.isFunction;
 
     /**
      `RSVP.filter` is similar to JavaScript's native `filter` method, except that it
       waits for all promises to become fulfilled before running the `filterFn` on
-      each item in given to `promises`. `RSVP.filterFn` returns a promise that will
+      each item in given to `promises`. `RSVP.filter` returns a promise that will
       become fulfilled with the result of running `filterFn` on the values the
       promises become fulfilled with.
 
@@ -390,7 +519,7 @@ define("rsvp/filter",
       ```
 
       If any of the `promises` given to `RSVP.filter` are rejected, the first promise
-      that is rejected will be given as an argument to the returned promises's
+      that is rejected will be given as an argument to the returned promise's
       rejection handler. For example:
 
       ```javascript
@@ -439,6 +568,7 @@ define("rsvp/filter",
       ```
 
       @method filter
+      @static
       @for RSVP
       @param {Array} promises
       @param {Function} filterFn - function to be called on each resolved value to
@@ -447,30 +577,32 @@ define("rsvp/filter",
       tooling.
       @return {Promise}
     */
-    function filter(promises, filterFn, label) {
-      if (!isArray(promises)) {
-        throw new TypeError('You must pass an array to filter.');
-      }
-      
-      if (!isFunction(filterFn)){
-        throw new TypeError("You must pass a function to filter's second argument.");
-      }
+    __exports__["default"] = function filter(promises, filterFn, label) {
+      return Promise.all(promises, label).then(function(values) {
+        if (!isFunction(filterFn)) {
+          throw new TypeError("You must pass a function as filter's second argument.");
+        }
 
-      return all(promises, label).then(function(values){
-        return map(promises, filterFn, label).then(function(filterResults){
-           var i,
-               valuesLen = values.length,
-               filtered = [];
+        var length = values.length;
+        var filtered = new Array(length);
 
-           for (i = 0; i < valuesLen; i++){
-             if(filterResults[i]) filtered.push(values[i]);
-           }
-           return filtered;
+        for (var i = 0; i < length; i++) {
+          filtered[i] = filterFn(values[i]);
+        }
+
+        return Promise.all(filtered, label).then(function(filtered) {
+          var results = [];
+
+          for (var i = 0; i < length; i++) {
+            if (filtered[i] === true) {
+              results.push(values[i]);
+            }
+          }
+
+          return results;
         });
       });
     }
-
-    __exports__["default"] = filter;
   });
 define("rsvp/hash", 
   ["./promise","./utils","exports"],
@@ -512,8 +644,9 @@ define("rsvp/hash",
       ````
 
       If any of the `promises` given to `RSVP.hash` are rejected, the first promise
-      that is rejected will be given as as the first argument, or as the reason to
-      the rejection handler. For example:
+      that is rejected will be given as the reason to the rejection handler.
+
+      Example:
 
       ```javascript
       var promises = {
@@ -559,9 +692,10 @@ define("rsvp/hash",
       ```
 
       @method hash
+      @static
       @for RSVP
       @param {Object} promises
-      @param {String} label - optional string that describes the promise.
+      @param {String} label optional string that describes the promise.
       Useful for tooling.
       @return {Promise} promise that is fulfilled when all properties of `promises`
       have been fulfilled, or rejected if any of them become rejected.
@@ -602,11 +736,173 @@ define("rsvp/hash",
               resolve(results);
             }
           } else {
-            Promise.cast(entry).then(fulfilledTo(property), onRejection);
+            Promise.resolve(entry).then(fulfilledTo(property), onRejection);
           }
         }
       });
     };
+  });
+define("rsvp/hash_settled", 
+  ["./promise","./utils","exports"],
+  function(__dependency1__, __dependency2__, __exports__) {
+    "use strict";
+    var Promise = __dependency1__["default"];
+    var isNonThenable = __dependency2__.isNonThenable;
+    var keysOf = __dependency2__.keysOf;
+
+    /**
+      `RSVP.hashSettled` is similar to `RSVP.allSettled`, but takes an object
+      instead of an array for its `promises` argument.
+
+      Unlike `RSVP.all` or `RSVP.hash`, which implement a fail-fast method,
+      but like `RSVP.allSettled`, `hashSettled` waits until all the
+      constituent promises have returned and then shows you all the results
+      with their states and values/reasons. This is useful if you want to
+      handle multiple promises' failure states together as a set.
+
+      Returns a promise that is fulfilled when all the given promises have been
+      settled, or rejected if the passed parameters are invalid.
+
+      The returned promise is fulfilled with a hash that has the same key names as
+      the `promises` object argument. If any of the values in the object are not
+      promises, they will be copied over to the fulfilled object and marked with state
+      'fulfilled'.
+
+      Example:
+
+      ```javascript
+      var promises = {
+        myPromise: RSVP.Promise.resolve(1),
+        yourPromise: RSVP.Promise.resolve(2),
+        theirPromise: RSVP.Promise.resolve(3),
+        notAPromise: 4
+      };
+
+      RSVP.hashSettled(promises).then(function(hash){
+        // hash here is an object that looks like:
+        // {
+        //   myPromise: { state: 'fulfilled', value: 1 },
+        //   yourPromise: { state: 'fulfilled', value: 2 },
+        //   theirPromise: { state: 'fulfilled', value: 3 },
+        //   notAPromise: { state: 'fulfilled', value: 4 }
+        // }
+      });
+      ```
+
+      If any of the `promises` given to `RSVP.hash` are rejected, the state will
+      be set to 'rejected' and the reason for rejection provided.
+
+      Example:
+
+      ```javascript
+      var promises = {
+        myPromise: RSVP.Promise.resolve(1),
+        rejectedPromise: RSVP.Promise.reject(new Error('rejection')),
+        anotherRejectedPromise: RSVP.Promise.reject(new Error('more rejection')),
+      };
+
+      RSVP.hashSettled(promises).then(function(hash){
+        // hash here is an object that looks like:
+        // {
+        //   myPromise:              { state: 'fulfilled', value: 1 },
+        //   rejectedPromise:        { state: 'rejected', reason: Error },
+        //   anotherRejectedPromise: { state: 'rejected', reason: Error },
+        // }
+        // Note that for rejectedPromise, reason.message == 'rejection',
+        // and for anotherRejectedPromise, reason.message == 'more rejection'.
+      });
+      ```
+
+      An important note: `RSVP.hashSettled` is intended for plain JavaScript objects that
+      are just a set of keys and values. `RSVP.hashSettled` will NOT preserve prototype
+      chains.
+
+      Example:
+
+      ```javascript
+      function MyConstructor(){
+        this.example = RSVP.Promise.resolve('Example');
+      }
+
+      MyConstructor.prototype = {
+        protoProperty: RSVP.Promise.resolve('Proto Property')
+      };
+
+      var myObject = new MyConstructor();
+
+      RSVP.hashSettled(myObject).then(function(hash){
+        // protoProperty will not be present, instead you will just have an
+        // object that looks like:
+        // {
+        //   example: { state: 'fulfilled', value: 'Example' }
+        // }
+        //
+        // hash.hasOwnProperty('protoProperty'); // false
+        // 'undefined' === typeof hash.protoProperty
+      });
+      ```
+
+      @method hashSettled
+      @for RSVP
+      @param {Object} promises
+      @param {String} label optional string that describes the promise.
+      Useful for tooling.
+      @return {Promise} promise that is fulfilled when when all properties of `promises`
+      have been settled.
+      @static
+    */
+    __exports__["default"] = function hashSettled(object, label) {
+      return new Promise(function(resolve, reject){
+        var results = {};
+        var keys = keysOf(object);
+        var remaining = keys.length;
+        var entry, property;
+
+        if (remaining === 0) {
+          resolve(results);
+          return;
+        }
+
+        function fulfilledResolver(property) {
+          return function(value) {
+            resolveAll(property, fulfilled(value));
+          };
+        }
+
+        function rejectedResolver(property) {
+          return function(reason) {
+            resolveAll(property, rejected(reason));
+          };
+        }
+
+        function resolveAll(property, value) {
+          results[property] = value;
+          if (--remaining === 0) {
+            resolve(results);
+          }
+        }
+
+        for (var i = 0; i < keys.length; i++) {
+          property = keys[i];
+          entry = object[property];
+
+          if (isNonThenable(entry)) {
+            resolveAll(property, fulfilled(entry));
+          } else {
+            Promise.resolve(entry).then(fulfilledResolver(property), rejectedResolver(property));
+          }
+        }
+      });
+    };
+
+    function fulfilled(value) {
+      return { state: 'fulfilled', value: value };
+    }
+
+
+    function rejected(reason) {
+      return { state: 'rejected', reason: reason };
+    }
   });
 define("rsvp/instrument", 
   ["./config","./utils","exports"],
@@ -635,16 +931,14 @@ define("rsvp/instrument",
     };
   });
 define("rsvp/map", 
-  ["./promise","./all","./utils","exports"],
-  function(__dependency1__, __dependency2__, __dependency3__, __exports__) {
+  ["./promise","./utils","exports"],
+  function(__dependency1__, __dependency2__, __exports__) {
     "use strict";
     var Promise = __dependency1__["default"];
-    var all = __dependency2__["default"];
-    var isArray = __dependency3__.isArray;
-    var isFunction = __dependency3__.isFunction;
+    var isArray = __dependency2__.isArray;
+    var isFunction = __dependency2__.isFunction;
 
     /**
-
      `RSVP.map` is similar to JavaScript's native `map` method, except that it
       waits for all promises to become fulfilled before running the `mapFn` on
       each item in given to `promises`. `RSVP.map` returns a promise that will
@@ -670,7 +964,7 @@ define("rsvp/map",
       ```
 
       If any of the `promises` given to `RSVP.map` are rejected, the first promise
-      that is rejected will be given as an argument to the returned promises's
+      that is rejected will be given as an argument to the returned promise's
       rejection handler. For example:
 
       ```javascript
@@ -711,57 +1005,42 @@ define("rsvp/map",
       ```
 
       @method map
+      @static
       @for RSVP
       @param {Array} promises
       @param {Function} mapFn function to be called on each fulfilled promise.
-      @param {String} label optional string for labelling the promise.
+      @param {String} label optional string for labeling the promise.
       Useful for tooling.
       @return {Promise} promise that is fulfilled with the result of calling
       `mapFn` on each fulfilled promise or value when they become fulfilled.
        The promise will be rejected if any of the given `promises` become rejected.
+      @static
     */
     __exports__["default"] = function map(promises, mapFn, label) {
-
-      if (!isArray(promises)) {
-        throw new TypeError('You must pass an array to map.');
-      }
-
-      if (!isFunction(mapFn)){
-        throw new TypeError("You must pass a function to map's second argument.");
-      }
-
-      return all(promises, label).then(function(results){
-        var resultLen = results.length,
-            mappedResults = [],
-            i;
-
-        for (i = 0; i < resultLen; i++){
-          mappedResults.push(mapFn(results[i]));
+      return Promise.all(promises, label).then(function(values) {
+        if (!isFunction(mapFn)) {
+          throw new TypeError("You must pass a function as map's second argument.");
         }
 
-        return all(mappedResults, label);
+        var length = values.length;
+        var results = new Array(length);
+
+        for (var i = 0; i < length; i++) {
+          results[i] = mapFn(values[i]);
+        }
+
+        return Promise.all(results, label);
       });
-    };
+    }
   });
 define("rsvp/node", 
-  ["./promise","exports"],
-  function(__dependency1__, __exports__) {
+  ["./promise","./utils","exports"],
+  function(__dependency1__, __dependency2__, __exports__) {
     "use strict";
+    /* global  $a_slice */
+
     var Promise = __dependency1__["default"];
-
-    var slice = Array.prototype.slice;
-
-    function makeNodeCallbackFor(resolve, reject) {
-      return function (error, value) {
-        if (error) {
-          reject(error);
-        } else if (arguments.length > 2) {
-          resolve(slice.call(arguments, 1));
-        } else {
-          resolve(value);
-        }
-      };
-    }
+    var isArray = __dependency2__.isArray;
 
     /**
       `RSVP.denodeify` takes a "node-style" function and returns a function that
@@ -782,10 +1061,65 @@ define("rsvp/node",
 
       ```javascript
       var fs = require('fs');
-
       var readFile = RSVP.denodeify(fs.readFile);
 
       readFile('myfile.txt').then(handleData, handleError);
+      ```
+
+      If the node function has multiple success parameters, then `denodeify`
+      just returns the first one:
+
+      ```javascript
+      var request = RSVP.denodeify(require('request'));
+
+      request('http://example.com').then(function(res) {
+        // ...
+      });
+      ```
+
+      However, if you need all success parameters, setting `denodeify`'s
+      second parameter to `true` causes it to return all success parameters
+      as an array:
+
+      ```javascript
+      var request = RSVP.denodeify(require('request'), true);
+
+      request('http://example.com').then(function(result) {
+        // result[0] -> res
+        // result[1] -> body
+      });
+      ```
+
+      Or if you pass it an array with names it returns the parameters as a hash:
+
+      ```javascript
+      var request = RSVP.denodeify(require('request'), ['res', 'body']);
+
+      request('http://example.com').then(function(result) {
+        // result.res
+        // result.body
+      });
+      ```
+
+      Sometimes you need to retain the `this`:
+
+      ```javascript
+      var app = require('express')();
+      var render = RSVP.denodeify(app.render.bind(app));
+      ```
+
+      The denodified function inherits from the original function. It works in all
+      environments, except IE 10 and below. Consequently all properties of the original
+      function are available to you. However, any properties you change on the
+      denodeified function won't be changed on the original function. Example:
+
+      ```javascript
+      var request = RSVP.denodeify(require('request')),
+          cookieJar = request.jar(); // <- Inheritance is used here
+
+      request('http://example.com', {jar: cookieJar}).then(function(res) {
+        // cookieJar.cookies holds now the cookies returned by example.com
+      });
       ```
 
       Using `denodeify` makes it easier to compose asynchronous operations instead
@@ -793,66 +1127,110 @@ define("rsvp/node",
 
       ```javascript
       var fs = require('fs');
-      var log = require('some-async-logger');
 
       fs.readFile('myfile.txt', function(err, data){
-        if (err) return handleError(err);
+        if (err) { ... } // Handle error
         fs.writeFile('myfile2.txt', data, function(err){
-          if (err) throw err;
-          log('success', function(err) {
-            if (err) throw err;
-          });
+          if (err) { ... } // Handle error
+          console.log('done')
         });
       });
       ```
 
-      You can chain the operations together using `then` from the returned promise:
+      you can chain the operations together using `then` from the returned promise:
 
       ```javascript
       var fs = require('fs');
-      var denodeify = RSVP.denodeify;
-      var readFile = denodeify(fs.readFile);
-      var writeFile = denodeify(fs.writeFile);
-      var log = denodeify(require('some-async-logger'));
+      var readFile = RSVP.denodeify(fs.readFile);
+      var writeFile = RSVP.denodeify(fs.writeFile);
 
       readFile('myfile.txt').then(function(data){
         return writeFile('myfile2.txt', data);
       }).then(function(){
-        return log('SUCCESS');
-      }).then(function(){
-        // success handler
-      }, function(reason){
-        // rejection handler
+        console.log('done')
+      }).catch(function(error){
+        // Handle error
       });
       ```
 
       @method denodeify
+      @static
       @for RSVP
       @param {Function} nodeFunc a "node-style" function that takes a callback as
       its last argument. The callback expects an error to be passed as its first
       argument (if an error occurred, otherwise null), and the value from the
       operation as its second argument ("function(err, value){ }").
-      @param {Any} binding optional argument for binding the "this" value when
-      calling the `nodeFunc` function.
+      @param {Boolean|Array} argumentNames An optional paramter that if set
+      to `true` causes the promise to fulfill with the callback's success arguments
+      as an array. This is useful if the node function has multiple success
+      paramters. If you set this paramter to an array with names, the promise will
+      fulfill with a hash with these names as keys and the success parameters as
+      values.
       @return {Function} a function that wraps `nodeFunc` to return an
       `RSVP.Promise`
+      @static
     */
-    __exports__["default"] = function denodeify(nodeFunc, binding) {
-      return function()  {
-        var nodeArgs = slice.call(arguments), resolve, reject;
-        var thisArg = this || binding;
+    __exports__["default"] = function denodeify(nodeFunc, argumentNames) {
+      var asArray = argumentNames === true;
+      var asHash = isArray(argumentNames);
 
-        return new Promise(function(resolve, reject) {
-          Promise.all(nodeArgs).then(function(nodeArgs) {
-            try {
-              nodeArgs.push(makeNodeCallbackFor(resolve, reject));
-              nodeFunc.apply(thisArg, nodeArgs);
-            } catch(e) {
-              reject(e);
+      function denodeifiedFunction() {
+        var nodeArgs;
+        $a_slice(nodeArgs, arguments);
+
+        var thisArg;
+
+        if (!asArray && !asHash && argumentNames) {
+          console.warn('Deprecation: RSVP.denodeify() doesn\'t allow setting the ' +
+                       '"this" binding anymore. Use yourFunction.bind(yourThis) instead.');
+          thisArg = argumentNames;
+        } else {
+          thisArg = this;
+        }
+
+        return Promise.all(nodeArgs).then(function(nodeArgs) {
+          return new Promise(resolver);
+
+          // sweet.js has a bug, this resolver can't defined in the constructor
+          // or the $a_slice macro doesn't work
+          function resolver(resolve, reject) {
+            function callback() {
+              var args;
+              $a_slice(args, arguments);
+
+              var error = args[0];
+              var value = args[1];
+
+              if (error) {
+                reject(error);
+              } else if (asArray) {
+                resolve(args.slice(1));
+              } else if (asHash) {
+                var obj = {};
+                var successArguments = args.slice(1);
+                var name;
+                var i;
+
+                for (i = 0; i < argumentNames.length; i++) {
+                  name = argumentNames[i];
+                  obj[name] = successArguments[i];
+                }
+
+                resolve(obj);
+              } else {
+                resolve(value);
+              }
             }
-          });
+
+            nodeArgs.push(callback);
+            nodeFunc.apply(thisArg, nodeArgs);
+          }
         });
       };
+
+      denodeifiedFunction.__proto__ = nodeFunc;
+
+      return denodeifiedFunction;
     };
   });
 define("rsvp/promise", 
@@ -877,6 +1255,112 @@ define("rsvp/promise",
     function noop() {}
 
     __exports__["default"] = Promise;
+
+
+    /**
+      Promise objects represent the eventual result of an asynchronous operation. The
+      primary way of interacting with a promise is through its `then` method, which
+      registers callbacks to receive either a promise’s eventual value or the reason
+      why the promise cannot be fulfilled.
+
+      Terminology
+      -----------
+
+      - `promise` is an object or function with a `then` method whose behavior conforms to this specification.
+      - `thenable` is an object or function that defines a `then` method.
+      - `value` is any legal JavaScript value (including undefined, a thenable, or a promise).
+      - `exception` is a value that is thrown using the throw statement.
+      - `reason` is a value that indicates why a promise was rejected.
+      - `settled` the final resting state of a promise, fulfilled or rejected.
+
+      A promise can be in one of three states: pending, fulfilled, or rejected.
+
+      Promises that are fulfilled have a fulfillment value and are in the fulfilled
+      state.  Promises that are rejected have a rejection reason and are in the
+      rejected state.  A fulfillment value is never a thenable.
+
+      Promises can also be said to *resolve* a value.  If this value is also a
+      promise, then the original promise's settled state will match the value's
+      settled state.  So a promise that *resolves* a promise that rejects will
+      itself reject, and a promise that *resolves* a promise that fulfills will
+      itself fulfill.
+
+
+      Basic Usage:
+      ------------
+
+      ```js
+      var promise = new Promise(function(resolve, reject) {
+        // on success
+        resolve(value);
+
+        // on failure
+        reject(reason);
+      });
+
+      promise.then(function(value) {
+        // on fulfillment
+      }, function(reason) {
+        // on rejection
+      });
+      ```
+
+      Advanced Usage:
+      ---------------
+
+      Promises shine when abstracting away asynchronous interactions such as
+      `XMLHttpRequest`s.
+
+      ```js
+      function getJSON(url) {
+        return new Promise(function(resolve, reject){
+          var xhr = new XMLHttpRequest();
+
+          xhr.open('GET', url);
+          xhr.onreadystatechange = handler;
+          xhr.responseType = 'json';
+          xhr.setRequestHeader('Accept', 'application/json');
+          xhr.send();
+
+          function handler() {
+            if (this.readyState === this.DONE) {
+              if (this.status === 200) {
+                resolve(this.response);
+              } else {
+                reject(new Error("getJSON: `" + url + "` failed with status: [" + this.status + "]");
+              }
+            }
+          };
+        });
+      }
+
+      getJSON('/posts.json').then(function(json) {
+        // on fulfillment
+      }, function(reason) {
+        // on rejection
+      });
+      ```
+
+      Unlike callbacks, promises are great composable primitives.
+
+      ```js
+      Promise.all([
+        getJSON('/posts'),
+        getJSON('/comments')
+      ]).then(function(values){
+        values[0] // => postsJSON
+        values[1] // => commentsJSON
+
+        return values;
+      });
+      ```
+
+      @class RSVP.Promise
+      @param {function}
+      @param {String} label optional string for labeling the promise.
+      Useful for tooling.
+      @constructor
+    */
     function Promise(resolver, label) {
       if (!isFunction(resolver)) {
         throw new TypeError('You must pass a resolver function as the first argument to the promise constructor');
@@ -967,6 +1451,200 @@ define("rsvp/promise",
         config.trigger('error', reason);
       },
 
+    /**
+      The primary way of interacting with a promise is through its `then` method,
+      which registers callbacks to receive either a promise's eventual value or the
+      reason why the promise cannot be fulfilled.
+
+      ```js
+      findUser().then(function(user){
+        // user is available
+      }, function(reason){
+        // user is unavailable, and you are given the reason why
+      });
+      ```
+
+      Chaining
+      --------
+
+      The return value of `then` is itself a promise.  This second, "downstream"
+      promise is resolved with the return value of the first promise's fulfillment
+      or rejection handler, or rejected if the handler throws an exception.
+
+      ```js
+      findUser().then(function (user) {
+        return user.name;
+      }, function (reason) {
+        return "default name";
+      }).then(function (userName) {
+        // If `findUser` fulfilled, `userName` will be the user's name, otherwise it
+        // will be `"default name"`
+      });
+
+      findUser().then(function (user) {
+        throw new Error("Found user, but still unhappy");
+      }, function (reason) {
+        throw new Error("`findUser` rejected and we're unhappy");
+      }).then(function (value) {
+        // never reached
+      }, function (reason) {
+        // if `findUser` fulfilled, `reason` will be "Found user, but still unhappy".
+        // If `findUser` rejected, `reason` will be "`findUser` rejected and we're unhappy".
+      });
+      ```
+      If the downstream promise does not specify a rejection handler, rejection reasons will be propagated further downstream.
+
+      ```js
+      findUser().then(function (user) {
+        throw new PedagogicalException("Upstream error");
+      }).then(function (value) {
+        // never reached
+      }).then(function (value) {
+        // never reached
+      }, function (reason) {
+        // The `PedgagocialException` is propagated all the way down to here
+      });
+      ```
+
+      Assimilation
+      ------------
+
+      Sometimes the value you want to propagate to a downstream promise can only be
+      retrieved asynchronously. This can be achieved by returning a promise in the
+      fulfillment or rejection handler. The downstream promise will then be pending
+      until the returned promise is settled. This is called *assimilation*.
+
+      ```js
+      findUser().then(function (user) {
+        return findCommentsByAuthor(user);
+      }).then(function (comments) {
+        // The user's comments are now available
+      });
+      ```
+
+      If the assimliated promise rejects, then the downstream promise will also reject.
+
+      ```js
+      findUser().then(function (user) {
+        return findCommentsByAuthor(user);
+      }).then(function (comments) {
+        // If `findCommentsByAuthor` fulfills, we'll have the value here
+      }, function (reason) {
+        // If `findCommentsByAuthor` rejects, we'll have the reason here
+      });
+      ```
+
+      Simple Example
+      --------------
+
+      Synchronous Example
+
+      ```javascript
+      var result;
+
+      try {
+        result = findResult();
+        // success
+      } catch(reason) {
+        // failure
+      }
+      ```
+
+      Errback Example
+
+      ```js
+      findResult(function(result, err){
+        if (err) {
+          // failure
+        } else {
+          // success
+        }
+      });
+      ```
+
+      Promise Example;
+
+      ```javascript
+      findResult().then(function(result){
+        // success
+      }, function(reason){
+        // failure
+      });
+      ```
+
+      Advanced Example
+      --------------
+
+      Synchronous Example
+
+      ```javascript
+      var author, books;
+
+      try {
+        author = findAuthor();
+        books  = findBooksByAuthor(author);
+        // success
+      } catch(reason) {
+        // failure
+      }
+      ```
+
+      Errback Example
+
+      ```js
+
+      function foundBooks(books) {
+
+      }
+
+      function failure(reason) {
+
+      }
+
+      findAuthor(function(author, err){
+        if (err) {
+          failure(err);
+          // failure
+        } else {
+          try {
+            findBoooksByAuthor(author, function(books, err) {
+              if (err) {
+                failure(err);
+              } else {
+                try {
+                  foundBooks(books);
+                } catch(reason) {
+                  failure(reason);
+                }
+              }
+            });
+          } catch(error) {
+            failure(err);
+          }
+          // success
+        }
+      });
+      ```
+
+      Promise Example;
+
+      ```javascript
+      findAuthor().
+        then(findBooksByAuthor).
+        then(function(books){
+          // found books
+      }).catch(function(reason){
+        // something went wrong
+      });
+      ```
+
+      @method then
+      @param {Function} onFulfilled
+      @param {Function} onRejected
+      @param {String} label optional string for labeling the promise.
+      Useful for tooling.
+      @return {Promise}
+    */
       then: function(onFulfillment, onRejection, label) {
         var promise = this;
         this._onerror = null;
@@ -989,10 +1667,78 @@ define("rsvp/promise",
         return thenPromise;
       },
 
+    /**
+      `catch` is simply sugar for `then(undefined, onRejection)` which makes it the same
+      as the catch block of a try/catch statement.
+
+      ```js
+      function findAuthor(){
+        throw new Error("couldn't find that author");
+      }
+
+      // synchronous
+      try {
+        findAuthor();
+      } catch(reason) {
+        // something went wrong
+      }
+
+      // async with promises
+      findAuthor().catch(function(reason){
+        // something went wrong
+      });
+      ```
+
+      @method catch
+      @param {Function} onRejection
+      @param {String} label optional string for labeling the promise.
+      Useful for tooling.
+      @return {Promise}
+    */
       'catch': function(onRejection, label) {
         return this.then(null, onRejection, label);
       },
 
+    /**
+      `finally` will be invoked regardless of the promise's fate just as native
+      try/catch/finally behaves
+
+      Synchronous example:
+
+      ```js
+      findAuthor() {
+        if (Math.random() > 0.5) {
+          throw new Error();
+        }
+        return new Author();
+      }
+
+      try {
+        return findAuthor(); // succeed or fail
+      } catch(error) {
+        return findOtherAuther();
+      } finally {
+        // always runs
+        // doesn't affect the return value
+      }
+      ```
+
+      Asynchronous example:
+
+      ```js
+      findAuthor().catch(function(reason){
+        return findOtherAuther();
+      }).finally(function(){
+        // author was either found, or not
+      });
+      ```
+
+      @method finally
+      @param {Function} callback
+      @param {String} label optional string for labeling the promise.
+      Useful for tooling.
+      @return {Promise}
+    */
       'finally': function(callback, label) {
         var constructor = this.constructor;
 
@@ -1065,7 +1811,7 @@ define("rsvp/promise",
               resolved = true;
 
               reject(promise, val);
-            }, 'derived from: ' + (promise._label || ' unknown promise'));
+            }, 'Settle: ' + (promise._label || ' unknown promise'));
 
             return true;
           }
@@ -1123,10 +1869,10 @@ define("rsvp/promise/all",
     var isNonThenable = __dependency1__.isNonThenable;
 
     /**
-      Returns a promise that is fulfilled when all the given promises have been
-      fulfilled, or rejected if any of them become rejected. The return promise
-      is fulfilled with an array that gives all the values in the order they were
-      passed in the `promises` array argument.
+      `RSVP.Promise.all` accepts an array of promises, and returns a new promise which
+      is fulfilled with an array of fulfillment values for the passed promises, or
+      rejected with the reason of the first passed promise to be rejected. It casts all
+      elements of the passed iterable to promises as it runs this algorithm.
 
       Example:
 
@@ -1161,21 +1907,24 @@ define("rsvp/promise/all",
       ```
 
       @method all
-      @for RSVP.Promise
-      @param {Array} promises
-      @param {String} label
+      @static
+      @param {Array} entries array of promises
+      @param {String} label optional string for labeling the promise.
+      Useful for tooling.
       @return {Promise} promise that is fulfilled when all `promises` have been
       fulfilled, or rejected if any of them become rejected.
+      @static
     */
     __exports__["default"] = function all(entries, label) {
-      if (!isArray(entries)) {
-        throw new TypeError('You must pass an array to all.');
-      }
 
       /*jshint validthis:true */
       var Constructor = this;
 
       return new Constructor(function(resolve, reject) {
+        if (!isArray(entries)) {
+          throw new TypeError('You must pass an array to all.');
+        }
+
         var remaining = entries.length;
         var results = new Array(remaining);
         var entry, pending = true;
@@ -1207,7 +1956,7 @@ define("rsvp/promise/all",
               resolve(results);
             }
           } else {
-            Constructor.cast(entry).then(fulfillmentAt(index), onRejection);
+            Constructor.resolve(entry).then(fulfillmentAt(index), onRejection);
           }
         }
       }, label);
@@ -1218,13 +1967,15 @@ define("rsvp/promise/cast",
   function(__exports__) {
     "use strict";
     /**
-      `RSVP.Promise.cast` returns the same promise if that promise shares a constructor
-      with the promise being casted.
+      @deprecated
+
+      `RSVP.Promise.cast` coerces its argument to a promise, or returns the
+      argument if it is already a promise which shares a constructor with the caster.
 
       Example:
 
       ```javascript
-      var promise = RSVP.resolve(1);
+      var promise = RSVP.Promise.resolve(1);
       var casted = RSVP.Promise.cast(promise);
 
       console.log(promise === casted); // true
@@ -1233,6 +1984,20 @@ define("rsvp/promise/cast",
       In the case of a promise whose constructor does not match, it is assimilated.
       The resulting promise will fulfill or reject based on the outcome of the
       promise being casted.
+
+      Example:
+
+      ```javascript
+      var thennable = $.getJSON('/api/foo');
+      var casted = RSVP.Promise.cast(thennable);
+
+      console.log(thennable === casted); // false
+      console.log(casted instanceof RSVP.Promise) // true
+
+      casted.then(function(data) {
+        // data is the value getJSON fulfills with
+      });
+      ```
 
       In the case of a non-promise, a promise which will fulfill with that value is
       returned.
@@ -1251,8 +2016,9 @@ define("rsvp/promise/cast",
       });
       ```
 
-      `RSVP.Promise.cast` is similar to `RSVP.resolve`, but `RSVP.Promise.cast` differs in the
+      `RSVP.Promise.cast` is similar to `RSVP.Promise.resolve`, but `RSVP.Promise.cast` differs in the
       following ways:
+
       * `RSVP.Promise.cast` serves as a memory-efficient way of getting a promise, when you
       have something that could either be a promise or a value. RSVP.resolve
       will have the same effect but will create a new promise wrapper if the
@@ -1262,13 +2028,13 @@ define("rsvp/promise/cast",
       ensured to have the behavior of the constructor you are calling cast on (i.e., RSVP.Promise).
 
       @method cast
-      @for RSVP.Promise
+      @static
       @param {Object} object to be casted
-      @return {Promise} promise that is fulfilled when all properties of `promises`
-      have been fulfilled, or rejected if any of them become rejected.
+      @param {String} label optional string for labeling the promise.
+      Useful for tooling.
+      @return {Promise} promise
     */
-
-    __exports__["default"] = function cast(object) {
+    __exports__["default"] = function cast(object, label) {
       /*jshint validthis:true */
       var Constructor = this;
 
@@ -1278,7 +2044,7 @@ define("rsvp/promise/cast",
 
       return new Constructor(function(resolve) {
         resolve(object);
-      });
+      }, label);
     };
   });
 define("rsvp/promise/race", 
@@ -1292,8 +2058,8 @@ define("rsvp/promise/race",
     var isNonThenable = __dependency1__.isNonThenable;
 
     /**
-      `RSVP.Promise.race` allows you to watch a series of promises and act as soon as the
-      first promise given to the `promises` argument fulfills or rejects.
+      `RSVP.Promise.race` returns a new promise which is settled in the same way as the
+      first passed promise to settle.
 
       Example:
 
@@ -1316,11 +2082,11 @@ define("rsvp/promise/race",
       });
       ```
 
-      `RSVP.race` is deterministic in that only the state of the first completed
-      promise matters. For example, even if other promises given to the `promises`
-      array argument are resolved, but the first completed promise has become
-      rejected before the other promises became fulfilled, the returned promise
-      will become rejected:
+      `RSVP.Promise.race` is deterministic in that only the state of the first
+      settled promise matters. For example, even if other promises given to the
+      `promises` array argument are resolved, but the first settled promise has
+      become rejected before the other promises became fulfilled, the returned
+      promise will become rejected:
 
       ```javascript
       var promise1 = new RSVP.Promise(function(resolve, reject){
@@ -1336,32 +2102,36 @@ define("rsvp/promise/race",
       });
 
       RSVP.Promise.race([promise1, promise2]).then(function(result){
-        // Code here never runs because there are rejected promises!
+        // Code here never runs
       }, function(reason){
         // reason.message === "promise2" because promise 2 became rejected before
         // promise 1 became fulfilled
       });
       ```
 
+      An example real-world use case is implementing timeouts:
+
+      ```javascript
+      RSVP.Promise.race([ajax('foo.json'), timeout(5000)])
+      ```
+
       @method race
-      @for RSVP.Promise
+      @static
       @param {Array} promises array of promises to observe
       @param {String} label optional string for describing the promise returned.
       Useful for tooling.
-      @return {Promise} a promise that becomes fulfilled with the value the first
-      completed promises is resolved with if the first completed promise was
-      fulfilled, or rejected with the reason that the first completed promise
-      was rejected with.
+      @return {Promise} a promise which settles in the same way as the first passed
+      promise to settle.
     */
     __exports__["default"] = function race(entries, label) {
-      if (!isArray(entries)) {
-        throw new TypeError('You must pass an array to race.');
-      }
-
       /*jshint validthis:true */
       var Constructor = this, entry;
 
       return new Constructor(function(resolve, reject) {
+        if (!isArray(entries)) {
+          throw new TypeError('You must pass an array to race.');
+        }
+
         var pending = true;
 
         function onFulfillment(value) { if (pending) { pending = false; resolve(value); } }
@@ -1374,7 +2144,7 @@ define("rsvp/promise/race",
             resolve(entry);
             return;
           } else {
-            Constructor.cast(entry).then(onFulfillment, onRejection);
+            Constructor.resolve(entry).then(onFulfillment, onRejection);
           }
         }
       }, label);
@@ -1385,8 +2155,8 @@ define("rsvp/promise/reject",
   function(__exports__) {
     "use strict";
     /**
-      `RSVP.reject` returns a promise that will become rejected with the passed
-      `reason`. `RSVP.reject` is essentially shorthand for the following:
+      `RSVP.Promise.reject` returns a promise rejected with the passed `reason`.
+      It is shorthand for the following:
 
       ```javascript
       var promise = new RSVP.Promise(function(resolve, reject){
@@ -1403,7 +2173,7 @@ define("rsvp/promise/reject",
       Instead of writing the above, your code now simply becomes the following:
 
       ```javascript
-      var promise = RSVP.reject(new Error('WHOOPS'));
+      var promise = RSVP.Promise.reject(new Error('WHOOPS'));
 
       promise.then(function(value){
         // Code here doesn't run because the promise is rejected!
@@ -1413,12 +2183,11 @@ define("rsvp/promise/reject",
       ```
 
       @method reject
-      @for RSVP.Promise
+      @static
       @param {Any} reason value that the returned promise will be rejected with.
       @param {String} label optional string for identifying the returned promise.
       Useful for tooling.
-      @return {Promise} a promise that will become rejected with the given
-      `reason`.
+      @return {Promise} a promise rejected with the given `reason`.
     */
     __exports__["default"] = function reject(reason, label) {
       /*jshint validthis:true */
@@ -1434,8 +2203,8 @@ define("rsvp/promise/resolve",
   function(__exports__) {
     "use strict";
     /**
-      `RSVP.resolve` returns a promise that will become fulfilled with the passed
-      `value`. `RSVP.resolve` is essentially shorthand for the following:
+      `RSVP.Promise.resolve` returns a promise that will become resolved with the
+      passed `value`. It is shorthand for the following:
 
       ```javascript
       var promise = new RSVP.Promise(function(resolve, reject){
@@ -1450,7 +2219,7 @@ define("rsvp/promise/resolve",
       Instead of writing the above, your code now simply becomes the following:
 
       ```javascript
-      var promise = RSVP.resolve(1);
+      var promise = RSVP.Promise.resolve(1);
 
       promise.then(function(value){
         // value === 1
@@ -1458,19 +2227,23 @@ define("rsvp/promise/resolve",
       ```
 
       @method resolve
-      @for RSVP.Promise
+      @static
       @param {Any} value value that the returned promise will be resolved with
       @param {String} label optional string for identifying the returned promise.
       Useful for tooling.
       @return {Promise} a promise that will become fulfilled with the given
       `value`
     */
-    __exports__["default"] = function resolve(value, label) {
+    __exports__["default"] = function resolve(object, label) {
       /*jshint validthis:true */
       var Constructor = this;
 
-      return new Constructor(function(resolve, reject) {
-        resolve(value);
+      if (object && typeof object === 'object' && object.constructor === Constructor) {
+        return object;
+      }
+
+      return new Constructor(function(resolve) {
+        resolve(object);
       }, label);
     };
   });
@@ -1479,7 +2252,16 @@ define("rsvp/race",
   function(__dependency1__, __exports__) {
     "use strict";
     var Promise = __dependency1__["default"];
+    /**
+      This is a convenient alias for `RSVP.Promise.race`.
 
+      @method race
+      @static
+      @for RSVP
+      @param {Array} array Array of promises.
+      @param {String} label An optional label. This is useful
+      for tooling.
+     */
     __exports__["default"] = function race(array, label) {
       return Promise.race(array, label);
     };
@@ -1490,6 +2272,17 @@ define("rsvp/reject",
     "use strict";
     var Promise = __dependency1__["default"];
 
+    /**
+      This is a convenient alias for `RSVP.Promise.reject`.
+
+      @method reject
+      @static
+      @for RSVP
+      @param {Any} reason value that the returned promise will be rejected with.
+      @param {String} label optional string for identifying the returned promise.
+      Useful for tooling.
+      @return {Promise} a promise rejected with the given `reason`.
+    */
     __exports__["default"] = function reject(reason, label) {
       return Promise.reject(reason, label);
     };
@@ -1499,7 +2292,18 @@ define("rsvp/resolve",
   function(__dependency1__, __exports__) {
     "use strict";
     var Promise = __dependency1__["default"];
+    /**
+      This is a convenient alias for `RSVP.Promise.resolve`.
 
+      @method resolve
+      @static
+      @for RSVP
+      @param {Any} value value that the returned promise will be resolved with
+      @param {String} label optional string for identifying the returned promise.
+      Useful for tooling.
+      @return {Promise} a promise that will become fulfilled with the given
+      `value`
+    */
     __exports__["default"] = function resolve(value, label) {
       return Promise.resolve(value, label);
     };
@@ -1517,8 +2321,8 @@ define("rsvp/rethrow",
       this reason, it is recommended that you always specify a second rejection
       handler function to `then`. However, `RSVP.rethrow` will throw the exception
       outside of the promise, so it bubbles up to your console if in the browser,
-      or domain/cause uncaught exception in Node. `rethrow` will throw the error
-      again so the error can be handled by the promise.
+      or domain/cause uncaught exception in Node. `rethrow` will also throw the
+      error again so the error can be handled by the promise per the spec.
 
       ```javascript
       function throws(){
@@ -1529,7 +2333,7 @@ define("rsvp/rethrow",
         throws();
       });
 
-      promise.fail(RSVP.rethrow).then(function(){
+      promise.catch(RSVP.rethrow).then(function(){
         // Code here doesn't run because the promise became rejected due to an
         // error!
       }, function (err){
@@ -1539,12 +2343,14 @@ define("rsvp/rethrow",
 
       The 'Whoops' error will be thrown on the next turn of the event loop
       and you can watch for it in your console. You can also handle it using a
-      rejection handler given to `.then` or `.fail` on the returned promise.
+      rejection handler given to `.then` or `.catch` on the returned promise.
 
       @method rethrow
+      @static
       @for RSVP
       @param {Error} reason reason the promise became rejected.
       @throws Error
+      @static
     */
     __exports__["default"] = function rethrow(reason) {
       setTimeout(function() {
@@ -1569,11 +2375,18 @@ define("rsvp/utils",
       return !objectOrFunction(x);
     }
 
-    __exports__.isNonThenable = isNonThenable;function isArray(x) {
-      return Object.prototype.toString.call(x) === "[object Array]";
+    __exports__.isNonThenable = isNonThenable;var _isArray;
+    if (!Array.isArray) {
+      _isArray = function (x) {
+        return Object.prototype.toString.call(x) === "[object Array]";
+      };
+    } else {
+      _isArray = Array.isArray;
     }
 
-    __exports__.isArray = isArray;// Date.now is not available in browsers < IE9
+    var isArray = _isArray;
+    __exports__.isArray = isArray;
+    // Date.now is not available in browsers < IE9
     // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/now#Compatibility
     var now = Date.now || function() { return new Date().getTime(); };
     __exports__.now = now;
@@ -1589,24 +2402,26 @@ define("rsvp/utils",
     __exports__.keysOf = keysOf;
   });
 define("rsvp", 
-  ["./rsvp/promise","./rsvp/events","./rsvp/node","./rsvp/all","./rsvp/race","./rsvp/hash","./rsvp/rethrow","./rsvp/defer","./rsvp/config","./rsvp/map","./rsvp/resolve","./rsvp/reject","./rsvp/asap","./rsvp/filter","exports"],
-  function(__dependency1__, __dependency2__, __dependency3__, __dependency4__, __dependency5__, __dependency6__, __dependency7__, __dependency8__, __dependency9__, __dependency10__, __dependency11__, __dependency12__, __dependency13__, __dependency14__, __exports__) {
+  ["./rsvp/promise","./rsvp/events","./rsvp/node","./rsvp/all","./rsvp/all_settled","./rsvp/race","./rsvp/hash","./rsvp/hash_settled","./rsvp/rethrow","./rsvp/defer","./rsvp/config","./rsvp/map","./rsvp/resolve","./rsvp/reject","./rsvp/filter","./rsvp/asap","exports"],
+  function(__dependency1__, __dependency2__, __dependency3__, __dependency4__, __dependency5__, __dependency6__, __dependency7__, __dependency8__, __dependency9__, __dependency10__, __dependency11__, __dependency12__, __dependency13__, __dependency14__, __dependency15__, __dependency16__, __exports__) {
     "use strict";
     var Promise = __dependency1__["default"];
     var EventTarget = __dependency2__["default"];
     var denodeify = __dependency3__["default"];
     var all = __dependency4__["default"];
-    var race = __dependency5__["default"];
-    var hash = __dependency6__["default"];
-    var rethrow = __dependency7__["default"];
-    var defer = __dependency8__["default"];
-    var config = __dependency9__.config;
-    var configure = __dependency9__.configure;
-    var map = __dependency10__["default"];
-    var resolve = __dependency11__["default"];
-    var reject = __dependency12__["default"];
-    var asap = __dependency13__["default"];
-    var filter = __dependency14__["default"];
+    var allSettled = __dependency5__["default"];
+    var race = __dependency6__["default"];
+    var hash = __dependency7__["default"];
+    var hashSettled = __dependency8__["default"];
+    var rethrow = __dependency9__["default"];
+    var defer = __dependency10__["default"];
+    var config = __dependency11__.config;
+    var configure = __dependency11__.configure;
+    var map = __dependency12__["default"];
+    var resolve = __dependency13__["default"];
+    var reject = __dependency14__["default"];
+    var filter = __dependency15__["default"];
+    var asap = __dependency16__["default"];
 
     config.async = asap; // default async is asap;
 
@@ -1636,8 +2451,10 @@ define("rsvp",
     __exports__.Promise = Promise;
     __exports__.EventTarget = EventTarget;
     __exports__.all = all;
+    __exports__.allSettled = allSettled;
     __exports__.race = race;
     __exports__.hash = hash;
+    __exports__.hashSettled = hashSettled;
     __exports__.rethrow = rethrow;
     __exports__.defer = defer;
     __exports__.denodeify = denodeify;
