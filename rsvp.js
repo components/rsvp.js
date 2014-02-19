@@ -130,18 +130,18 @@ define('rsvp/all-settled', [
                 return;
             }
             var results = new Array(remaining);
-            function fulfilledResolver(index) {
+            function fulfilledResolver(index$2) {
                 return function (value) {
-                    resolveAll(index, fulfilled(value));
+                    resolveAll(index$2, fulfilled(value));
                 };
             }
-            function rejectedResolver(index) {
+            function rejectedResolver(index$2) {
                 return function (reason) {
-                    resolveAll(index, rejected(reason));
+                    resolveAll(index$2, rejected(reason));
                 };
             }
-            function resolveAll(index, value) {
-                results[index] = value;
+            function resolveAll(index$2, value) {
+                results[index$2] = value;
                 if (--remaining === 0) {
                     resolve(results);
                 }
@@ -614,18 +614,18 @@ define('rsvp/hash-settled', [
                 resolve(results);
                 return;
             }
-            function fulfilledResolver(property) {
+            function fulfilledResolver(property$2) {
                 return function (value) {
-                    resolveAll(property, fulfilled(value));
+                    resolveAll(property$2, fulfilled(value));
                 };
             }
-            function rejectedResolver(property) {
+            function rejectedResolver(property$2) {
                 return function (reason) {
-                    resolveAll(property, rejected(reason));
+                    resolveAll(property$2, rejected(reason));
                 };
             }
-            function resolveAll(property, value) {
-                results[property] = value;
+            function resolveAll(property$2, value) {
+                results[property$2] = value;
                 if (--remaining === 0) {
                     resolve(results);
                 }
@@ -761,9 +761,9 @@ define('rsvp/hash', [
                 resolve(results);
                 return;
             }
-            function fulfilledTo(property) {
+            function fulfilledTo(property$2) {
                 return function (value) {
-                    results[property] = value;
+                    results[property$2] = value;
                     if (--remaining === 0) {
                         resolve(results);
                     }
@@ -1509,9 +1509,9 @@ define('rsvp/promise/all', [
                 resolve(results);
                 return;
             }
-            function fulfillmentAt(index) {
+            function fulfillmentAt(index$2) {
                 return function (value) {
-                    results[index] = value;
+                    results[index$2] = value;
                     if (--remaining === 0) {
                         resolve(results);
                     }
