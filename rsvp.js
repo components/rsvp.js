@@ -3,7 +3,7 @@
  * @copyright Copyright (c) 2014 Yehuda Katz, Tom Dale, Stefan Penner and contributors
  * @license   Licensed under MIT license
  *            See https://raw.githubusercontent.com/tildeio/rsvp.js/master/LICENSE
- * @version   3.0.11
+ * @version   3.0.12
  */
 
 (function() {
@@ -802,6 +802,8 @@
     function $$rsvp$promise$$Promise(resolver, label) {
       this._id = $$rsvp$promise$$counter++;
       this._label = label;
+      this._state = undefined;
+      this._result = undefined;
       this._subscribers = [];
 
       if ($$rsvp$config$$config.instrument) {
@@ -832,13 +834,7 @@
     $$rsvp$promise$$Promise.prototype = {
       constructor: $$rsvp$promise$$Promise,
 
-      _id: undefined,
       _guidKey: $$rsvp$promise$$guidKey,
-      _label: undefined,
-
-      _state: undefined,
-      _result: undefined,
-      _subscribers: undefined,
 
       _onerror: function (reason) {
         $$rsvp$config$$config.trigger('error', reason);
@@ -1212,10 +1208,10 @@
       return args;
     }
 
-    function $$rsvp$node$$wrapThenable(then, arg, args) {
+    function $$rsvp$node$$wrapThenable(then, promise) {
       return {
-        then: function() {
-          return then.apply(arg, args);
+        then: function(onFulFillment, onRejection) {
+          return then.call(promise, onFulFillment, onRejection);
         }
       };
     }
@@ -1232,13 +1228,14 @@
           arg = arguments[i];
 
           if (!promiseInput) {
+            // TODO: clean this up
             promiseInput = $$rsvp$node$$needsPromiseInput(arg);
             if (promiseInput === $$rsvp$node$$GET_THEN_ERROR) {
               var p = new $$rsvp$promise$$default($$$internal$$noop);
               $$$internal$$reject(p, $$rsvp$node$$GET_THEN_ERROR.value);
               return p;
-            } else if (promiseInput && arg.constructor !== $$rsvp$promise$$default) {
-              arg = $$rsvp$node$$wrapThenable(promiseInput, arguments);
+            } else if (promiseInput && promiseInput !== true) {
+              arg = $$rsvp$node$$wrapThenable(promiseInput, arg);
             }
           }
           args[i] = arg;
