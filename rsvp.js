@@ -3,7 +3,7 @@
  * @copyright Copyright (c) 2014 Yehuda Katz, Tom Dale, Stefan Penner and contributors
  * @license   Licensed under MIT license
  *            See https://raw.githubusercontent.com/tildeio/rsvp.js/master/LICENSE
- * @version   3.0.12
+ * @version   3.0.13
  */
 
 (function() {
@@ -254,11 +254,17 @@
 
     var $$utils$$isArray = $$utils$$_isArray;
     var $$utils$$now = Date.now || function() { return new Date().getTime(); };
+    function $$utils$$F() { }
 
-    var $$utils$$o_create = (Object.create || function(object) {
-      var o = function() { };
-      o.prototype = object;
-      return o;
+    var $$utils$$o_create = (Object.create || function (o) {
+      if (arguments.length > 1) {
+        throw new Error('Second argument not supported');
+      }
+      if (typeof o !== 'object') {
+        throw new TypeError('Argument must be an object');
+      }
+      $$utils$$F.prototype = o;
+      return new $$utils$$F();
     });
 
     var $$instrument$$queue = [];
