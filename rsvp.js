@@ -3,12 +3,11 @@
  * @copyright Copyright (c) 2014 Yehuda Katz, Tom Dale, Stefan Penner and contributors
  * @license   Licensed under MIT license
  *            See https://raw.githubusercontent.com/tildeio/rsvp.js/master/LICENSE
- * @version   3.0.13
+ * @version   3.0.15
  */
 
 (function() {
     "use strict";
-
     function $$rsvp$events$$indexOf(callbacks, callback) {
       for (var i=0, l=callbacks.length; i<l; i++) {
         if (callbacks[i] === callback) { return i; }
@@ -71,10 +70,10 @@
         @private
         @param {Object} object object to extend with EventTarget methods
       */
-      mixin: function(object) {
-        object.on = this.on;
-        object.off = this.off;
-        object.trigger = this.trigger;
+      'mixin': function(object) {
+        object['on']      = this['on'];
+        object['off']     = this['off'];
+        object['trigger'] = this['trigger'];
         object._promiseCallbacks = undefined;
         return object;
       },
@@ -96,7 +95,7 @@
         @param {String} eventName name of the event to listen for
         @param {Function} callback function to be called when the event is triggered.
       */
-      on: function(eventName, callback) {
+      'on': function(eventName, callback) {
         var allCallbacks = $$rsvp$events$$callbacksFor(this), callbacks;
 
         callbacks = allCallbacks[eventName];
@@ -149,7 +148,7 @@
         argument is given, all callbacks will be removed from the event's callback
         queue.
       */
-      off: function(eventName, callback) {
+      'off': function(eventName, callback) {
         var allCallbacks = $$rsvp$events$$callbacksFor(this), callbacks, index;
 
         if (!callback) {
@@ -194,7 +193,7 @@
         @param {Any} options optional value to be passed to any event handlers for
         the given `eventName`
       */
-      trigger: function(eventName, options) {
+      'trigger': function(eventName, options) {
         var allCallbacks = $$rsvp$events$$callbacksFor(this), callbacks, callback;
 
         if (callbacks = allCallbacks[eventName]) {
@@ -212,14 +211,14 @@
       instrument: false
     };
 
-    $$rsvp$events$$default.mixin($$rsvp$config$$config);
+    $$rsvp$events$$default['mixin']($$rsvp$config$$config);
 
     function $$rsvp$config$$configure(name, value) {
       if (name === 'onerror') {
         // handle for legacy users that expect the actual
         // error to be passed to their function added via
         // `RSVP.configure('onerror', someFunctionHere);`
-        $$rsvp$config$$config.on('error', value);
+        $$rsvp$config$$config['on']('error', value);
         return;
       }
 
@@ -243,7 +242,6 @@
     }
 
     var $$utils$$_isArray;
-
     if (!Array.isArray) {
       $$utils$$_isArray = function (x) {
         return Object.prototype.toString.call(x) === '[object Array]';
@@ -253,7 +251,9 @@
     }
 
     var $$utils$$isArray = $$utils$$_isArray;
+
     var $$utils$$now = Date.now || function() { return new Date().getTime(); };
+
     function $$utils$$F() { }
 
     var $$utils$$o_create = (Object.create || function (o) {
@@ -269,34 +269,54 @@
 
     var $$instrument$$queue = [];
 
-    var $$instrument$$default = function instrument(eventName, promise, child) {
+    function $$instrument$$scheduleFlush() {
+      setTimeout(function() {
+        var entry;
+        for (var i = 0; i < $$instrument$$queue.length; i++) {
+          entry = $$instrument$$queue[i];
+
+          var payload = entry.payload;
+
+          payload.guid = payload.key + payload.id;
+          payload.childGuid = payload.key + payload.childId;
+          if (payload.error) {
+            payload.stack = payload.error.stack;
+          }
+
+          $$rsvp$config$$config['trigger'](entry.name, entry.payload);
+        }
+        $$instrument$$queue.length = 0;
+      }, 50);
+    }
+
+    function $$instrument$$instrument(eventName, promise, child) {
       if (1 === $$instrument$$queue.push({
           name: eventName,
           payload: {
-            guid: promise._guidKey + promise._id,
+            key: promise._guidKey,
+            id:  promise._id,
             eventName: eventName,
             detail: promise._result,
-            childGuid: child && promise._guidKey + child._id,
+            childId: child && child._id,
             label: promise._label,
             timeStamp: $$utils$$now(),
-            stack: new Error(promise._label).stack
+            error: $$rsvp$config$$config["instrument-with-stack"] ? new Error(promise._label) : null
           }})) {
-
-            setTimeout(function() {
-              var entry;
-              for (var i = 0; i < $$instrument$$queue.length; i++) {
-                entry = $$instrument$$queue[i];
-                $$rsvp$config$$config.trigger(entry.name, entry.payload);
-              }
-              $$instrument$$queue.length = 0;
-            }, 50);
+            $$instrument$$scheduleFlush();
           }
-      };
+      }
+    var $$instrument$$default = $$instrument$$instrument;
+
+    function  $$$internal$$withOwnPromise() {
+      return new TypeError('A promises callback cannot return that same promise.');
+    }
 
     function $$$internal$$noop() {}
+
     var $$$internal$$PENDING   = void 0;
     var $$$internal$$FULFILLED = 1;
     var $$$internal$$REJECTED  = 2;
+
     var $$$internal$$GET_THEN_ERROR = new $$$internal$$ErrorObject();
 
     function $$$internal$$getThen(promise) {
@@ -344,7 +364,8 @@
     function $$$internal$$handleOwnThenable(promise, thenable) {
       if (thenable._state === $$$internal$$FULFILLED) {
         $$$internal$$fulfill(promise, thenable._result);
-      } else if (promise._state === $$$internal$$REJECTED) {
+      } else if (thenable._state === $$$internal$$REJECTED) {
+        thenable._onError = null;
         $$$internal$$reject(promise, thenable._result);
       } else {
         $$$internal$$subscribe(thenable, undefined, function(value) {
@@ -388,8 +409,8 @@
     }
 
     function $$$internal$$publishRejection(promise) {
-      if (promise._onerror) {
-        promise._onerror(promise._result);
+      if (promise._onError) {
+        promise._onError(promise._result);
       }
 
       $$$internal$$publish(promise);
@@ -414,7 +435,6 @@
       if (promise._state !== $$$internal$$PENDING) { return; }
       promise._state = $$$internal$$REJECTED;
       promise._result = reason;
-
       $$rsvp$config$$config.async($$$internal$$publishRejection, promise);
     }
 
@@ -422,7 +442,7 @@
       var subscribers = parent._subscribers;
       var length = subscribers.length;
 
-      parent._onerror = null;
+      parent._onError = null;
 
       subscribers[length] = child;
       subscribers[length + $$$internal$$FULFILLED] = onFulfillment;
@@ -490,7 +510,7 @@
         }
 
         if (promise === value) {
-          $$$internal$$reject(promise, new TypeError('A promises callback cannot return that same promise.'));
+          $$$internal$$reject(promise, $$$internal$$withOwnPromise());
           return;
         }
 
@@ -513,10 +533,15 @@
     }
 
     function $$$internal$$initializePromise(promise, resolver) {
+      var resolved = false;
       try {
         resolver(function resolvePromise(value){
+          if (resolved) { return; }
+          resolved = true;
           $$$internal$$resolve(promise, value);
         }, function rejectPromise(reason) {
+          if (resolved) { return; }
+          resolved = true;
           $$$internal$$reject(promise, reason);
         });
       } catch(e) {
@@ -564,6 +589,8 @@
       }
     }
 
+    var $$enumerator$$default = $$enumerator$$Enumerator;
+
     $$enumerator$$Enumerator.prototype._validateInput = function(input) {
       return $$utils$$isArray(input);
     };
@@ -575,8 +602,6 @@
     $$enumerator$$Enumerator.prototype._init = function() {
       this._result = new Array(this.length);
     };
-
-    var $$enumerator$$default = $$enumerator$$Enumerator;
 
     $$enumerator$$Enumerator.prototype._enumerate = function() {
       var length  = this.length;
@@ -592,7 +617,7 @@
       var c = this._instanceConstructor;
       if ($$utils$$isMaybeThenable(entry)) {
         if (entry.constructor === c && entry._state !== $$$internal$$PENDING) {
-          entry._onerror = null;
+          entry._onError = null;
           this._settledAt(entry._state, i, entry._result);
         } else {
           this._willSettleAt(c.resolve(entry), i);
@@ -634,12 +659,11 @@
         enumerator._settledAt($$$internal$$REJECTED, i, reason);
       });
     };
-
-    var $$promise$all$$default = function all(entries, label) {
+    function $$promise$all$$all(entries, label) {
       return new $$enumerator$$default(this, entries, true /* abort on reject */, label).promise;
-    };
-
-    var $$promise$race$$default = function race(entries, label) {
+    }
+    var $$promise$all$$default = $$promise$all$$all;
+    function $$promise$race$$race(entries, label) {
       /*jshint validthis:true */
       var Constructor = this;
 
@@ -665,9 +689,9 @@
       }
 
       return promise;
-    };
-
-    var $$promise$resolve$$default = function resolve(object, label) {
+    }
+    var $$promise$race$$default = $$promise$race$$race;
+    function $$promise$resolve$$resolve(object, label) {
       /*jshint validthis:true */
       var Constructor = this;
 
@@ -678,15 +702,16 @@
       var promise = new Constructor($$$internal$$noop, label);
       $$$internal$$resolve(promise, object);
       return promise;
-    };
-
-    var $$promise$reject$$default = function reject(reason, label) {
+    }
+    var $$promise$resolve$$default = $$promise$resolve$$resolve;
+    function $$promise$reject$$reject(reason, label) {
       /*jshint validthis:true */
       var Constructor = this;
       var promise = new Constructor($$$internal$$noop, label);
       $$$internal$$reject(promise, reason);
       return promise;
-    };
+    }
+    var $$promise$reject$$default = $$promise$reject$$reject;
 
     var $$rsvp$promise$$guidKey = 'rsvp_' + $$utils$$now() + '-';
     var $$rsvp$promise$$counter = 0;
@@ -699,112 +724,6 @@
       throw new TypeError("Failed to construct 'Promise': Please use the 'new' operator, this object constructor cannot be called as a function.");
     }
 
-    var $$rsvp$promise$$default = $$rsvp$promise$$Promise;
-
-    /**
-      Promise objects represent the eventual result of an asynchronous operation. The
-      primary way of interacting with a promise is through its `then` method, which
-      registers callbacks to receive either a promise’s eventual value or the reason
-      why the promise cannot be fulfilled.
-
-      Terminology
-      -----------
-
-      - `promise` is an object or function with a `then` method whose behavior conforms to this specification.
-      - `thenable` is an object or function that defines a `then` method.
-      - `value` is any legal JavaScript value (including undefined, a thenable, or a promise).
-      - `exception` is a value that is thrown using the throw statement.
-      - `reason` is a value that indicates why a promise was rejected.
-      - `settled` the final resting state of a promise, fulfilled or rejected.
-
-      A promise can be in one of three states: pending, fulfilled, or rejected.
-
-      Promises that are fulfilled have a fulfillment value and are in the fulfilled
-      state.  Promises that are rejected have a rejection reason and are in the
-      rejected state.  A fulfillment value is never a thenable.
-
-      Promises can also be said to *resolve* a value.  If this value is also a
-      promise, then the original promise's settled state will match the value's
-      settled state.  So a promise that *resolves* a promise that rejects will
-      itself reject, and a promise that *resolves* a promise that fulfills will
-      itself fulfill.
-
-
-      Basic Usage:
-      ------------
-
-      ```js
-      var promise = new Promise(function(resolve, reject) {
-        // on success
-        resolve(value);
-
-        // on failure
-        reject(reason);
-      });
-
-      promise.then(function(value) {
-        // on fulfillment
-      }, function(reason) {
-        // on rejection
-      });
-      ```
-
-      Advanced Usage:
-      ---------------
-
-      Promises shine when abstracting away asynchronous interactions such as
-      `XMLHttpRequest`s.
-
-      ```js
-      function getJSON(url) {
-        return new Promise(function(resolve, reject){
-          var xhr = new XMLHttpRequest();
-
-          xhr.open('GET', url);
-          xhr.onreadystatechange = handler;
-          xhr.responseType = 'json';
-          xhr.setRequestHeader('Accept', 'application/json');
-          xhr.send();
-
-          function handler() {
-            if (this.readyState === this.DONE) {
-              if (this.status === 200) {
-                resolve(this.response);
-              } else {
-                reject(new Error('getJSON: `' + url + '` failed with status: [' + this.status + ']'));
-              }
-            }
-          };
-        });
-      }
-
-      getJSON('/posts.json').then(function(json) {
-        // on fulfillment
-      }, function(reason) {
-        // on rejection
-      });
-      ```
-
-      Unlike callbacks, promises are great composable primitives.
-
-      ```js
-      Promise.all([
-        getJSON('/posts'),
-        getJSON('/comments')
-      ]).then(function(values){
-        values[0] // => postsJSON
-        values[1] // => commentsJSON
-
-        return values;
-      });
-      ```
-
-      @class RSVP.Promise
-      @param {function} resolver
-      @param {String} label optional string for labeling the promise.
-      Useful for tooling.
-      @constructor
-    */
     function $$rsvp$promise$$Promise(resolver, label) {
       this._id = $$rsvp$promise$$counter++;
       this._label = label;
@@ -829,9 +748,10 @@
       }
     }
 
+    var $$rsvp$promise$$default = $$rsvp$promise$$Promise;
+
     // deprecated
     $$rsvp$promise$$Promise.cast = $$promise$resolve$$default;
-
     $$rsvp$promise$$Promise.all = $$promise$all$$default;
     $$rsvp$promise$$Promise.race = $$promise$race$$default;
     $$rsvp$promise$$Promise.resolve = $$promise$resolve$$default;
@@ -842,8 +762,14 @@
 
       _guidKey: $$rsvp$promise$$guidKey,
 
-      _onerror: function (reason) {
-        $$rsvp$config$$config.trigger('error', reason);
+      _onError: function (reason) {
+        $$rsvp$config$$config.async(function(promise) {
+          setTimeout(function() {
+            if (promise._onError) {
+              $$rsvp$config$$config['trigger']('error', reason);
+            }
+          }, 0);
+        }, this);
       },
 
     /**
@@ -1051,7 +977,7 @@
           return this;
         }
 
-        parent._onerror = null;
+        parent._onError = null;
 
         var child = new this.constructor($$$internal$$noop, label);
         var result = parent._result;
@@ -1175,6 +1101,7 @@
       }
     }
 
+
     function $$rsvp$node$$tryApply(f, s, a) {
       try {
         f.apply(s, a);
@@ -1222,7 +1149,7 @@
       };
     }
 
-    var $$rsvp$node$$default = function denodeify(nodeFunc, options) {
+    function $$rsvp$node$$denodeify(nodeFunc, options) {
       var fn = function() {
         var self = this;
         var l = arguments.length;
@@ -1272,7 +1199,9 @@
       fn.__proto__ = nodeFunc;
 
       return fn;
-    };
+    }
+
+    var $$rsvp$node$$default = $$rsvp$node$$denodeify;
 
     function $$rsvp$node$$handleValueInput(promise, args, nodeFunc, self) {
       var result = $$rsvp$node$$tryApply(nodeFunc, self, args);
@@ -1303,10 +1232,10 @@
         return false;
       }
     }
-
-    var $$rsvp$all$$default = function all(array, label) {
+    function $$rsvp$all$$all(array, label) {
       return $$rsvp$promise$$default.all(array, label);
-    };
+    }
+    var $$rsvp$all$$default = $$rsvp$all$$all;
 
     function $$rsvp$all$settled$$AllSettled(Constructor, entries, label) {
       this._superConstructor(Constructor, entries, false /* don't abort on reject */, label);
@@ -1315,27 +1244,26 @@
     $$rsvp$all$settled$$AllSettled.prototype = $$utils$$o_create($$enumerator$$default.prototype);
     $$rsvp$all$settled$$AllSettled.prototype._superConstructor = $$enumerator$$default;
     $$rsvp$all$settled$$AllSettled.prototype._makeResult = $$enumerator$$makeSettledResult;
-
     $$rsvp$all$settled$$AllSettled.prototype._validationError = function() {
       return new Error('allSettled must be called with an array');
     };
 
-    var $$rsvp$all$settled$$default = function allSettled(entries, label) {
+    function $$rsvp$all$settled$$allSettled(entries, label) {
       return new $$rsvp$all$settled$$AllSettled($$rsvp$promise$$default, entries, label).promise;
-    };
-
-    var $$rsvp$race$$default = function race(array, label) {
+    }
+    var $$rsvp$all$settled$$default = $$rsvp$all$settled$$allSettled;
+    function $$rsvp$race$$race(array, label) {
       return $$rsvp$promise$$default.race(array, label);
-    };
-
+    }
+    var $$rsvp$race$$default = $$rsvp$race$$race;
     function $$promise$hash$$PromiseHash(Constructor, object, label) {
       this._superConstructor(Constructor, object, true, label);
     }
 
     var $$promise$hash$$default = $$promise$hash$$PromiseHash;
+
     $$promise$hash$$PromiseHash.prototype = $$utils$$o_create($$enumerator$$default.prototype);
     $$promise$hash$$PromiseHash.prototype._superConstructor = $$enumerator$$default;
-
     $$promise$hash$$PromiseHash.prototype._init = function() {
       this._result = {};
     };
@@ -1371,10 +1299,10 @@
         this._eachEntry(result.entry, result.position);
       }
     };
-
-    var $$rsvp$hash$$default = function hash(object, label) {
+    function $$rsvp$hash$$hash(object, label) {
       return new $$promise$hash$$default($$rsvp$promise$$default, object, label).promise;
-    };
+    }
+    var $$rsvp$hash$$default = $$rsvp$hash$$hash;
 
     function $$rsvp$hash$settled$$HashSettled(Constructor, object, label) {
       this._superConstructor(Constructor, object, false, label);
@@ -1388,29 +1316,29 @@
       return new Error('hashSettled must be called with an object');
     };
 
-    var $$rsvp$hash$settled$$default = function hashSettled(object, label) {
+    function $$rsvp$hash$settled$$hashSettled(object, label) {
       return new $$rsvp$hash$settled$$HashSettled($$rsvp$promise$$default, object, label).promise;
-    };
-
-    var $$rsvp$rethrow$$default = function rethrow(reason) {
+    }
+    var $$rsvp$hash$settled$$default = $$rsvp$hash$settled$$hashSettled;
+    function $$rsvp$rethrow$$rethrow(reason) {
       setTimeout(function() {
         throw reason;
       });
       throw reason;
-    };
-
-    var $$rsvp$defer$$default = function defer(label) {
+    }
+    var $$rsvp$rethrow$$default = $$rsvp$rethrow$$rethrow;
+    function $$rsvp$defer$$defer(label) {
       var deferred = { };
 
-      deferred.promise = new $$rsvp$promise$$default(function(resolve, reject) {
-        deferred.resolve = resolve;
-        deferred.reject = reject;
+      deferred['promise'] = new $$rsvp$promise$$default(function(resolve, reject) {
+        deferred['resolve'] = resolve;
+        deferred['reject'] = reject;
       }, label);
 
       return deferred;
-    };
-
-    var $$rsvp$map$$default = function map(promises, mapFn, label) {
+    }
+    var $$rsvp$defer$$default = $$rsvp$defer$$defer;
+    function $$rsvp$map$$map(promises, mapFn, label) {
       return $$rsvp$promise$$default.all(promises, label).then(function(values) {
         if (!$$utils$$isFunction(mapFn)) {
           throw new TypeError("You must pass a function as map's second argument.");
@@ -1425,17 +1353,17 @@
 
         return $$rsvp$promise$$default.all(results, label);
       });
-    };
-
-    var $$rsvp$resolve$$default = function resolve(value, label) {
+    }
+    var $$rsvp$map$$default = $$rsvp$map$$map;
+    function $$rsvp$resolve$$resolve(value, label) {
       return $$rsvp$promise$$default.resolve(value, label);
-    };
-
-    var $$rsvp$reject$$default = function reject(reason, label) {
+    }
+    var $$rsvp$resolve$$default = $$rsvp$resolve$$resolve;
+    function $$rsvp$reject$$reject(reason, label) {
       return $$rsvp$promise$$default.reject(reason, label);
-    };
-
-    var $$rsvp$filter$$default = function filter(promises, filterFn, label) {
+    }
+    var $$rsvp$reject$$default = $$rsvp$reject$$reject;
+    function $$rsvp$filter$$filter(promises, filterFn, label) {
       return $$rsvp$promise$$default.all(promises, label).then(function(values) {
         if (!$$utils$$isFunction(filterFn)) {
           throw new TypeError("You must pass a function as filter's second argument.");
@@ -1464,11 +1392,11 @@
           return results;
         });
       });
-    };
-
+    }
+    var $$rsvp$filter$$default = $$rsvp$filter$$filter;
     var $$rsvp$asap$$len = 0;
 
-    var $$rsvp$asap$$default = function asap(callback, arg) {
+    function $$rsvp$asap$$asap(callback, arg) {
       $$rsvp$asap$$queue[$$rsvp$asap$$len] = callback;
       $$rsvp$asap$$queue[$$rsvp$asap$$len + 1] = arg;
       $$rsvp$asap$$len += 2;
@@ -1478,10 +1406,14 @@
         // will be processed by this flush that we are scheduling.
         $$rsvp$asap$$scheduleFlush();
       }
-    };
+    }
 
-    var $$rsvp$asap$$browserGlobal = (typeof window !== 'undefined') ? window : {};
+    var $$rsvp$asap$$default = $$rsvp$asap$$asap;
+
+    var $$rsvp$asap$$browserWindow = (typeof window !== 'undefined') ? window : undefined;
+    var $$rsvp$asap$$browserGlobal = $$rsvp$asap$$browserWindow || {};
     var $$rsvp$asap$$BrowserMutationObserver = $$rsvp$asap$$browserGlobal.MutationObserver || $$rsvp$asap$$browserGlobal.WebKitMutationObserver;
+    var $$rsvp$asap$$isNode = typeof process !== 'undefined' && {}.toString.call(process) === '[object process]';
 
     // test for web worker but not in IE10
     var $$rsvp$asap$$isWorker = typeof Uint8ClampedArray !== 'undefined' &&
@@ -1490,8 +1422,22 @@
 
     // node
     function $$rsvp$asap$$useNextTick() {
+      var nextTick = process.nextTick;
+      // node version 0.10.x displays a deprecation warning when nextTick is used recursively
+      // setImmediate should be used instead instead
+      var version = process.versions.node.match(/^(?:(\d+)\.)?(?:(\d+)\.)?(\*|\d+)$/);
+      if (Array.isArray(version) && version[1] === '0' && version[2] === '10') {
+        nextTick = setImmediate;
+      }
       return function() {
-        process.nextTick($$rsvp$asap$$flush);
+        nextTick($$rsvp$asap$$flush);
+      };
+    }
+
+    // vertx
+    function $$rsvp$asap$$useVertxTimer() {
+      return function() {
+        vertxNext($$rsvp$asap$$flush);
       };
     }
 
@@ -1522,7 +1468,6 @@
     }
 
     var $$rsvp$asap$$queue = new Array(1000);
-
     function $$rsvp$asap$$flush() {
       for (var i = 0; i < $$rsvp$asap$$len; i+=2) {
         var callback = $$rsvp$asap$$queue[i];
@@ -1537,34 +1482,43 @@
       $$rsvp$asap$$len = 0;
     }
 
-    var $$rsvp$asap$$scheduleFlush;
+    function $$rsvp$asap$$attemptVertex() {
+      try {
+        var vertx = require('vertx');
+        var vertxNext = vertx.runOnLoop || vertx.runOnContext;
+        return $$rsvp$asap$$useVertxTimer();
+      } catch(e) {
+        return $$rsvp$asap$$useSetTimeout();
+      }
+    }
 
+    var $$rsvp$asap$$scheduleFlush;
     // Decide what async method to use to triggering processing of queued callbacks:
-    if (typeof process !== 'undefined' && {}.toString.call(process) === '[object process]') {
+    if ($$rsvp$asap$$isNode) {
       $$rsvp$asap$$scheduleFlush = $$rsvp$asap$$useNextTick();
     } else if ($$rsvp$asap$$BrowserMutationObserver) {
       $$rsvp$asap$$scheduleFlush = $$rsvp$asap$$useMutationObserver();
     } else if ($$rsvp$asap$$isWorker) {
       $$rsvp$asap$$scheduleFlush = $$rsvp$asap$$useMessageChannel();
+    } else if ($$rsvp$asap$$browserWindow === undefined && typeof require === 'function') {
+      $$rsvp$asap$$scheduleFlush = $$rsvp$asap$$attemptVertex();
     } else {
       $$rsvp$asap$$scheduleFlush = $$rsvp$asap$$useSetTimeout();
     }
 
     // default async is asap;
     $$rsvp$config$$config.async = $$rsvp$asap$$default;
-
     var $$rsvp$$cast = $$rsvp$resolve$$default;
-
     function $$rsvp$$async(callback, arg) {
       $$rsvp$config$$config.async(callback, arg);
     }
 
     function $$rsvp$$on() {
-      $$rsvp$config$$config.on.apply($$rsvp$config$$config, arguments);
+      $$rsvp$config$$config['on'].apply($$rsvp$config$$config, arguments);
     }
 
     function $$rsvp$$off() {
-      $$rsvp$config$$config.off.apply($$rsvp$config$$config, arguments);
+      $$rsvp$config$$config['off'].apply($$rsvp$config$$config, arguments);
     }
 
     // Set up instrumentation through `window.__PROMISE_INTRUMENTATION__`
@@ -1600,11 +1554,13 @@
     };
 
     /* global define:true module:true window: true */
-    if (typeof define === 'function' && define.amd) {
+    if (typeof define === 'function' && define['amd']) {
       define(function() { return rsvp$umd$$RSVP; });
-    } else if (typeof module !== 'undefined' && module.exports) {
-      module.exports = rsvp$umd$$RSVP;
+    } else if (typeof module !== 'undefined' && module['exports']) {
+      module['exports'] = rsvp$umd$$RSVP;
     } else if (typeof this !== 'undefined') {
       this['RSVP'] = rsvp$umd$$RSVP;
     }
 }).call(this);
+
+//# sourceMappingURL=rsvp.js.map
