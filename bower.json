@@ -1,12 +1,12 @@
 {
   "name": "rsvp.js",
-  "version": "3.0.18",
+  "version": "3.0.19",
   "homepage": "https://github.com/tildeio/rsvp.js",
   "authors": [
     "Stefan Penner <stefan.penner@gmail.com>"
   ],
   "description": "A lightweight library that provides tools for organizing asynchronous code",
-  "main": "rsvp.js",
+  "main": "dist/rsvp.js",
   "keywords": [
     "promise"
   ],
