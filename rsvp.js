@@ -3,7 +3,7 @@
  * @copyright Copyright (c) 2014 Yehuda Katz, Tom Dale, Stefan Penner and contributors
  * @license   Licensed under MIT license
  *            See https://raw.githubusercontent.com/tildeio/rsvp.js/master/LICENSE
- * @version   3.0.19
+ * @version   3.0.20
  */
 
 (function() {
@@ -773,13 +773,12 @@
       _guidKey: lib$rsvp$promise$$guidKey,
 
       _onError: function (reason) {
-        lib$rsvp$config$$config.async(function(promise) {
-          setTimeout(function() {
-            if (promise._onError) {
-              lib$rsvp$config$$config['trigger']('error', reason);
-            }
-          }, 0);
-        }, this);
+        var promise = this;
+        lib$rsvp$config$$config.after(function() {
+          if (promise._onError) {
+            lib$rsvp$config$$config['trigger']('error', reason);
+          }
+        });
       },
 
     /**
@@ -1536,8 +1535,11 @@
     }
     var lib$rsvp$rethrow$$default = lib$rsvp$rethrow$$rethrow;
 
-    // default async is asap;
+    // defaults
     lib$rsvp$config$$config.async = lib$rsvp$asap$$default;
+    lib$rsvp$config$$config.after = function(cb) {
+      setTimeout(cb, 0);
+    };
     var lib$rsvp$$cast = lib$rsvp$resolve$$default;
     function lib$rsvp$$async(callback, arg) {
       lib$rsvp$config$$config.async(callback, arg);
