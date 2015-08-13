@@ -3,7 +3,7 @@
   "namespace": "RSVP",
   "version": "3.0.21",
   "description": "A lightweight library that provides tools for organizing asynchronous code",
-  "main": "dist/rsvp.js",
+  "main": "rsvp.js",
   "files": [
     "dist",
     "lib"
