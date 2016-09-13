@@ -3,7 +3,7 @@
  * @copyright Copyright (c) 2016 Yehuda Katz, Tom Dale, Stefan Penner and contributors
  * @license   Licensed under MIT license
  *            See https://raw.githubusercontent.com/tildeio/rsvp.js/master/LICENSE
- * @version   3.3.0
+ * @version   3.3.1
  */
 
 (function (global, factory) {
@@ -2414,17 +2414,23 @@ if (typeof self === 'object') {
     throw new Error('no global: `self` or `global` found');
   }
 
+var _async$filter;
+
+function _defineProperty(obj, key, value) { if (key in obj) { Object.defineProperty(obj, key, { value: value, enumerable: true, configurable: true, writable: true }); } else { obj[key] = value; } return obj; }
+
 // defaults
 
+// the default export here is for backwards compat:
+//   https://github.com/tildeio/rsvp.js/issues/434
 config.async = asap;
 config.after = function (cb) {
   return setTimeout(cb, 0);
 };
 var cast = resolve$2;
 
-function async(callback, arg) {
-  config.async(callback, arg);
-}
+var async = function async(callback, arg) {
+  return config.async(callback, arg);
+};
 
 function on() {
   config['on'].apply(config, arguments);
@@ -2443,8 +2449,28 @@ if (typeof window !== 'undefined' && typeof window['__PROMISE_INSTRUMENTATION__'
       on(eventName, callbacks[eventName]);
     }
   }
-}
+}var rsvp = (_async$filter = {
+  cast: cast,
+  Promise: Promise,
+  EventTarget: EventTarget,
+  all: all$1,
+  allSettled: allSettled,
+  race: race$1,
+  hash: hash,
+  hashSettled: hashSettled,
+  rethrow: rethrow,
+  defer: defer,
+  denodeify: denodeify,
+  configure: configure,
+  on: on,
+  off: off,
+  resolve: resolve$2,
+  reject: reject$2,
+  map: map
+}, _defineProperty(_async$filter, 'async', async), _defineProperty(_async$filter, 'filter', // babel seems to error if async isn't a computed prop here...
+filter), _async$filter);
 
+exports['default'] = rsvp;
 exports.cast = cast;
 exports.Promise = Promise;
 exports.EventTarget = EventTarget;
@@ -2461,8 +2487,8 @@ exports.on = on;
 exports.off = off;
 exports.resolve = resolve$2;
 exports.reject = reject$2;
-exports.async = async;
 exports.map = map;
+exports.async = async;
 exports.filter = filter;
 
 Object.defineProperty(exports, '__esModule', { value: true });
