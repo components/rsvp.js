@@ -3,7 +3,7 @@
  * @copyright Copyright (c) 2016 Yehuda Katz, Tom Dale, Stefan Penner and contributors
  * @license   Licensed under MIT license
  *            See https://raw.githubusercontent.com/tildeio/rsvp.js/master/LICENSE
- * @version   3.3.2
+ * @version   3.3.3
  */
 
 (function (global, factory) {
@@ -2329,9 +2329,12 @@ function useNextTick() {
 
 // vertx
 function useVertxTimer() {
-  return function () {
-    return vertxNext(flush);
-  };
+  if (typeof vertxNext !== 'undefined') {
+    return function () {
+      vertxNext(flush);
+    };
+  }
+  return useSetTimeout();
 }
 
 function useMutationObserver() {
