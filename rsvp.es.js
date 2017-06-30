@@ -6,12 +6,6 @@
  * @version   3.6.0
  */
 
-(function (global, factory) {
-	typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
-	typeof define === 'function' && define.amd ? define(['exports'], factory) :
-	(factory((global.RSVP = global.RSVP || {})));
-}(this, (function (exports) { 'use strict';
-
 function indexOf(callbacks, callback) {
   for (var i = 0, l = callbacks.length; i < l; i++) {
     if (callbacks[i] === callback) {
@@ -2516,30 +2510,6 @@ var rsvp = (_asap$cast$Promise$Ev = {
   map: map
 }, _defineProperty(_asap$cast$Promise$Ev, 'async', async), _defineProperty(_asap$cast$Promise$Ev, 'filter', filter), _asap$cast$Promise$Ev);
 
-exports['default'] = rsvp;
-exports.asap = asap;
-exports.cast = cast;
-exports.Promise = Promise;
-exports.EventTarget = EventTarget;
-exports.all = all$1;
-exports.allSettled = allSettled;
-exports.race = race$1;
-exports.hash = hash;
-exports.hashSettled = hashSettled;
-exports.rethrow = rethrow;
-exports.defer = defer;
-exports.denodeify = denodeify;
-exports.configure = configure;
-exports.on = on;
-exports.off = off;
-exports.resolve = resolve$2;
-exports.reject = reject$2;
-exports.map = map;
-exports.async = async;
-exports.filter = filter;
+export { asap, cast, Promise, EventTarget, all$1 as all, allSettled, race$1 as race, hash, hashSettled, rethrow, defer, denodeify, configure, on, off, resolve$2 as resolve, reject$2 as reject, map, async, filter };export default rsvp;
 
-Object.defineProperty(exports, '__esModule', { value: true });
-
-})));
-
-//# sourceMappingURL=rsvp.map
+//# sourceMappingURL=rsvp.es.map
