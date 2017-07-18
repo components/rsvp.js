@@ -3,18 +3,8 @@
  * @copyright Copyright (c) 2016 Yehuda Katz, Tom Dale, Stefan Penner and contributors
  * @license   Licensed under MIT license
  *            See https://raw.githubusercontent.com/tildeio/rsvp.js/master/LICENSE
- * @version   4.6.1
+ * @version   4.0.0
  */
-
-function indexOf(callbacks, callback) {
-  for (var i = 0, l = callbacks.length; i < l; i++) {
-    if (callbacks[i] === callback) {
-      return i;
-    }
-  }
-
-  return -1;
-}
 
 function callbacksFor(object) {
   var callbacks = object._promiseCallbacks;
@@ -99,7 +89,7 @@ var EventTarget = {
       callbacks = allCallbacks[eventName] = [];
     }
 
-    if (indexOf(callbacks, callback) === -1) {
+    if (callbacks.indexOf(callback)) {
       callbacks.push(callback);
     }
   },
@@ -147,7 +137,7 @@ var EventTarget = {
 
     callbacks = allCallbacks[eventName];
 
-    index = indexOf(callbacks, callback);
+    index = callbacks.indexOf(callback);
 
     if (index !== -1) {
       callbacks.splice(index, 1);
@@ -227,23 +217,6 @@ function isMaybeThenable(x) {
   return x !== null && typeof x === 'object';
 }
 
-var _isArray = void 0;
-if (Array.isArray) {
-  _isArray = Array.isArray;
-} else {
-  _isArray = function (x) {
-    return Object.prototype.toString.call(x) === '[object Array]';
-  };
-}
-
-var isArray = _isArray;
-
-// Date.now is not available in browsers < IE9
-// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/now#Compatibility
-var now = Date.now || function () {
-  return new Date().getTime();
-};
-
 var queue = [];
 
 function scheduleFlush() {
@@ -275,7 +248,7 @@ function instrument(eventName, promise, child) {
       detail: promise._result,
       childId: child && child._id,
       label: promise._label,
-      timeStamp: now(),
+      timeStamp: Date.now(),
       error: config["instrument-with-stack"] ? new Error(promise._label) : null
     } })) {
     scheduleFlush();
@@ -337,6 +310,10 @@ var PENDING = void 0;
 var FULFILLED = 1;
 var REJECTED = 2;
 
+function ErrorObject() {
+  this.error = null;
+}
+
 var GET_THEN_ERROR = new ErrorObject();
 
 function getThen(promise) {
@@ -346,6 +323,25 @@ function getThen(promise) {
     GET_THEN_ERROR.error = error;
     return GET_THEN_ERROR;
   }
+}
+
+var TRY_CATCH_ERROR = new ErrorObject();
+
+var tryCatchCallback = void 0;
+function tryCatcher() {
+  try {
+    var target = tryCatchCallback;
+    tryCatchCallback = null;
+    return target.apply(this, arguments);
+  } catch (e) {
+    TRY_CATCH_ERROR.error = e;
+    return TRY_CATCH_ERROR;
+  }
+}
+
+function tryCatch(fn) {
+  tryCatchCallback = fn;
+  return tryCatcher;
 }
 
 function tryThen(then$$1, value, fulfillmentHandler, rejectionHandler) {
@@ -508,28 +504,13 @@ function publish(promise) {
   promise._subscribers.length = 0;
 }
 
-function ErrorObject() {
-  this.error = null;
-}
-
-var TRY_CATCH_ERROR = new ErrorObject();
-
-function tryCatch(callback, result) {
-  try {
-    return callback(result);
-  } catch (e) {
-    TRY_CATCH_ERROR.error = e;
-    return TRY_CATCH_ERROR;
-  }
-}
-
 function invokeCallback(state, promise, callback, result) {
   var hasCallback = isFunction(callback);
   var value = void 0,
       error = void 0;
 
   if (hasCallback) {
-    value = tryCatch(callback, result);
+    value = tryCatch(callback)(result);
 
     if (value === TRY_CATCH_ERROR) {
       error = value.error;
@@ -604,109 +585,116 @@ function then(onFulfillment, onRejection, label) {
   return child;
 }
 
-function Enumerator(Constructor, input, abortOnReject, label) {
-  this._instanceConstructor = Constructor;
-  this.promise = new Constructor(noop, label);
-  this._abortOnReject = abortOnReject;
+var Enumerator = function () {
+  function Enumerator(Constructor, input, abortOnReject, label) {
+    this._instanceConstructor = Constructor;
+    this.promise = new Constructor(noop, label);
+    this._abortOnReject = abortOnReject;
+    this.isUsingOwnPromise = Constructor === Promise;
 
-  this._init.apply(this, arguments);
-}
-
-Enumerator.prototype._init = function (Constructor, input) {
-  var len = input.length || 0;
-  this.length = len;
-  this._remaining = len;
-  this._result = new Array(len);
-
-  this._enumerate(input);
-  if (this._remaining === 0) {
-    fulfill(this.promise, this._result);
+    this._init.apply(this, arguments);
   }
-};
 
-Enumerator.prototype._enumerate = function (input) {
-  var length = this.length;
-  var promise = this.promise;
+  Enumerator.prototype._init = function _init(Constructor, input) {
+    var len = input.length || 0;
+    this.length = len;
+    this._remaining = len;
+    this._result = new Array(len);
 
-  for (var i = 0; promise._state === PENDING && i < length; i++) {
-    this._eachEntry(input[i], i);
-  }
-};
+    this._enumerate(input);
+  };
 
-Enumerator.prototype._settleMaybeThenable = function (entry, i) {
-  var c = this._instanceConstructor;
-  var resolve$$1 = c.resolve;
+  Enumerator.prototype._enumerate = function _enumerate(input) {
+    var length = this.length;
+    var promise = this.promise;
 
-  if (resolve$$1 === resolve$1) {
-    var then$$1 = getThen(entry);
-
-    if (then$$1 === then && entry._state !== PENDING) {
-      entry._onError = null;
-      this._settledAt(entry._state, i, entry._result);
-    } else if (typeof then$$1 !== 'function') {
-      this._remaining--;
-      this._result[i] = this._makeResult(FULFILLED, i, entry);
-    } else if (c === Promise) {
-      var promise = new c(noop);
-      handleMaybeThenable(promise, entry, then$$1);
-      this._willSettleAt(promise, i);
-    } else {
-      this._willSettleAt(new c(function (resolve$$1) {
-        return resolve$$1(entry);
-      }), i);
+    for (var i = 0; promise._state === PENDING && i < length; i++) {
+      this._eachEntry(input[i], i, true);
     }
-  } else {
-    this._willSettleAt(resolve$$1(entry), i);
-  }
-};
 
-Enumerator.prototype._eachEntry = function (entry, i) {
-  if (isMaybeThenable(entry)) {
-    this._settleMaybeThenable(entry, i);
-  } else {
-    this._remaining--;
-    this._result[i] = this._makeResult(FULFILLED, i, entry);
-  }
-};
+    this._checkFullfillment();
+  };
 
-Enumerator.prototype._settledAt = function (state, i, value) {
-  var promise = this.promise;
+  Enumerator.prototype._checkFullfillment = function _checkFullfillment() {
+    if (this._remaining === 0) {
+      fulfill(this.promise, this._result);
+    }
+  };
 
-  if (promise._state === PENDING) {
-    if (this._abortOnReject && state === REJECTED) {
-      reject(promise, value);
+  Enumerator.prototype._settleMaybeThenable = function _settleMaybeThenable(entry, i, firstPass) {
+    var c = this._instanceConstructor;
+    var resolve$$1 = c.resolve;
+
+    if (resolve$$1 === resolve$1) {
+      var then$$1 = getThen(entry);
+
+      if (then$$1 === then && entry._state !== PENDING) {
+        entry._onError = null;
+        this._settledAt(entry._state, i, entry._result, firstPass);
+      } else if (typeof then$$1 !== 'function') {
+        this._settledAt(FULFILLED, i, entry, firstPass);
+      } else if (this.isUsingOwnPromise) {
+        var promise = new c(noop);
+        handleMaybeThenable(promise, entry, then$$1);
+        this._willSettleAt(promise, i, firstPass);
+      } else {
+        this._willSettleAt(new c(function (resolve$$1) {
+          return resolve$$1(entry);
+        }), i, firstPass);
+      }
     } else {
-      this._remaining--;
-      this._result[i] = this._makeResult(state, i, value);
-      if (this._remaining === 0) {
-        fulfill(promise, this._result);
+      this._willSettleAt(resolve$$1(entry), i, firstPass);
+    }
+  };
+
+  Enumerator.prototype._eachEntry = function _eachEntry(entry, i, firstPass) {
+    if (isMaybeThenable(entry)) {
+      this._settleMaybeThenable(entry, i, firstPass);
+    } else {
+      this._setResultAt(FULFILLED, i, entry, firstPass);
+    }
+  };
+
+  Enumerator.prototype._settledAt = function _settledAt(state, i, value, firstPass) {
+    var promise = this.promise;
+
+    if (promise._state === PENDING) {
+      if (this._abortOnReject && state === REJECTED) {
+        reject(promise, value);
+      } else {
+        this._setResultAt(state, i, value, firstPass);
+        this._checkFullfillment();
       }
     }
-  }
-};
+  };
 
-Enumerator.prototype._makeResult = function (state, i, value) {
-  return value;
-};
+  Enumerator.prototype._setResultAt = function _setResultAt(state, i, value, firstPass) {
+    this._remaining--;
+    this._result[i] = value;
+  };
 
-Enumerator.prototype._willSettleAt = function (promise, i) {
-  var enumerator = this;
+  Enumerator.prototype._willSettleAt = function _willSettleAt(promise, i, firstPass) {
+    var _this = this;
 
-  subscribe(promise, undefined, function (value) {
-    return enumerator._settledAt(FULFILLED, i, value);
-  }, function (reason) {
-    return enumerator._settledAt(REJECTED, i, reason);
-  });
-};
+    subscribe(promise, undefined, function (value) {
+      return _this._settledAt(FULFILLED, i, value, firstPass);
+    }, function (reason) {
+      return _this._settledAt(REJECTED, i, reason, firstPass);
+    });
+  };
 
-function makeSettledResult(state, position, value) {
+  return Enumerator;
+}();
+
+function setSettledResult(state, i, value) {
+  this._remaining--;
   if (state === FULFILLED) {
-    return {
+    this._result[i] = {
       state: 'fulfilled',
       value: value
     };
   } else {
-    return {
+    this._result[i] = {
       state: 'rejected',
       reason: value
     };
@@ -761,7 +749,7 @@ function makeSettledResult(state, position, value) {
   @static
 */
 function all(entries, label) {
-  if (!isArray(entries)) {
+  if (!Array.isArray(entries)) {
     return this.reject(new TypeError("Promise.all must be called with an array"), label);
   }
   return new Enumerator(this, entries, true /* abort on reject */, label).promise;
@@ -839,7 +827,7 @@ function race(entries, label) {
 
   var promise = new Constructor(noop, label);
 
-  if (!isArray(entries)) {
+  if (!Array.isArray(entries)) {
     reject(promise, new TypeError('Promise.race must be called with an array'));
     return promise;
   }
@@ -898,7 +886,7 @@ function reject$1(reason, label) {
   return promise;
 }
 
-var guidKey = 'rsvp_' + now() + '-';
+var guidKey = 'rsvp_' + Date.now() + '-';
 var counter = 0;
 
 function needsResolver() {
@@ -1013,117 +1001,126 @@ function needsNew() {
   Useful for tooling.
   @constructor
 */
-function Promise(resolver, label) {
-  this._id = counter++;
-  this._label = label;
-  this._state = undefined;
-  this._result = undefined;
-  this._subscribers = [];
 
-  config.instrument && instrument('created', this);
+var Promise = function () {
+  function Promise(resolver, label) {
+    this._id = counter++;
+    this._label = label;
+    this._state = undefined;
+    this._result = undefined;
+    this._subscribers = [];
 
-  if (noop !== resolver) {
-    typeof resolver !== 'function' && needsResolver();
-    this instanceof Promise ? initializePromise(this, resolver) : needsNew();
-  }
-}
+    config.instrument && instrument('created', this);
 
-Promise.prototype._onError = function (reason) {
-  var _this = this;
-
-  config.after(function () {
-    if (_this._onError) {
-      config.trigger('error', reason, _this._label);
+    if (noop !== resolver) {
+      typeof resolver !== 'function' && needsResolver();
+      this instanceof Promise ? initializePromise(this, resolver) : needsNew();
     }
-  });
-};
-
-/**
-  `catch` is simply sugar for `then(undefined, onRejection)` which makes it the same
-  as the catch block of a try/catch statement.
-
-  ```js
-  function findAuthor(){
-    throw new Error('couldn\'t find that author');
   }
 
-  // synchronous
-  try {
-    findAuthor();
-  } catch(reason) {
-    // something went wrong
-  }
+  Promise.prototype._onError = function _onError(reason) {
+    var _this = this;
 
-  // async with promises
-  findAuthor().catch(function(reason){
-    // something went wrong
-  });
-  ```
+    config.after(function () {
+      if (_this._onError) {
+        config.trigger('error', reason, _this._label);
+      }
+    });
+  };
 
-  @method catch
-  @param {Function} onRejection
-  @param {String} label optional string for labeling the promise.
-  Useful for tooling.
-  @return {Promise}
-*/
-Promise.prototype.catch = function (onRejection, label) {
-  return this.then(undefined, onRejection, label);
-};
-
-/**
-  `finally` will be invoked regardless of the promise's fate just as native
-  try/catch/finally behaves
-
-  Synchronous example:
-
-  ```js
-  findAuthor() {
-    if (Math.random() > 0.5) {
-      throw new Error();
+  /**
+    `catch` is simply sugar for `then(undefined, onRejection)` which makes it the same
+    as the catch block of a try/catch statement.
+  
+    ```js
+    function findAuthor(){
+      throw new Error('couldn\'t find that author');
     }
-    return new Author();
-  }
-
-  try {
-    return findAuthor(); // succeed or fail
-  } catch(error) {
-    return findOtherAuthor();
-  } finally {
-    // always runs
-    // doesn't affect the return value
-  }
-  ```
-
-  Asynchronous example:
-
-  ```js
-  findAuthor().catch(function(reason){
-    return findOtherAuthor();
-  }).finally(function(){
-    // author was either found, or not
-  });
-  ```
-
-  @method finally
-  @param {Function} callback
-  @param {String} label optional string for labeling the promise.
-  Useful for tooling.
-  @return {Promise}
-*/
-Promise.prototype.finally = function (callback, label) {
-  var promise = this;
-  var constructor = promise.constructor;
-
-  return promise.then(function (value) {
-    return constructor.resolve(callback()).then(function () {
-      return value;
+  
+    // synchronous
+    try {
+      findAuthor();
+    } catch(reason) {
+      // something went wrong
+    }
+  
+    // async with promises
+    findAuthor().catch(function(reason){
+      // something went wrong
     });
-  }, function (reason) {
-    return constructor.resolve(callback()).then(function () {
-      throw reason;
+    ```
+  
+    @method catch
+    @param {Function} onRejection
+    @param {String} label optional string for labeling the promise.
+    Useful for tooling.
+    @return {Promise}
+  */
+
+
+  Promise.prototype.catch = function _catch(onRejection, label) {
+    return this.then(undefined, onRejection, label);
+  };
+
+  /**
+    `finally` will be invoked regardless of the promise's fate just as native
+    try/catch/finally behaves
+  
+    Synchronous example:
+  
+    ```js
+    findAuthor() {
+      if (Math.random() > 0.5) {
+        throw new Error();
+      }
+      return new Author();
+    }
+  
+    try {
+      return findAuthor(); // succeed or fail
+    } catch(error) {
+      return findOtherAuthor();
+    } finally {
+      // always runs
+      // doesn't affect the return value
+    }
+    ```
+  
+    Asynchronous example:
+  
+    ```js
+    findAuthor().catch(function(reason){
+      return findOtherAuthor();
+    }).finally(function(){
+      // author was either found, or not
     });
-  }, label);
-};
+    ```
+  
+    @method finally
+    @param {Function} callback
+    @param {String} label optional string for labeling the promise.
+    Useful for tooling.
+    @return {Promise}
+  */
+
+
+  Promise.prototype.finally = function _finally(callback, label) {
+    var promise = this;
+    var constructor = promise.constructor;
+
+    return promise.then(function (value) {
+      return constructor.resolve(callback()).then(function () {
+        return value;
+      });
+    }, function (reason) {
+      return constructor.resolve(callback()).then(function () {
+        throw reason;
+      });
+    }, label);
+  };
+
+  return Promise;
+}();
 
 Promise.cast = resolve$1; // deprecated
 Promise.all = all;
@@ -1545,7 +1542,7 @@ function denodeify(nodeFunc, options) {
     var promise = new Promise(noop);
 
     args[l] = function (err, val) {
-      if (err) reject(promise, err);else if (options === undefined) resolve(promise, val);else if (options === true) resolve(promise, arrayResult(arguments));else if (isArray(options)) resolve(promise, makeObject(arguments, options));else resolve(promise, val);
+      if (err) reject(promise, err);else if (options === undefined) resolve(promise, val);else if (options === true) resolve(promise, arrayResult(arguments));else if (Array.isArray(options)) resolve(promise, makeObject(arguments, options));else resolve(promise, val);
     };
 
     if (promiseInput) {
@@ -1618,7 +1615,7 @@ var AllSettled = function (_Enumerator) {
   return AllSettled;
 }(Enumerator);
 
-AllSettled.prototype._makeResult = makeSettledResult;
+AllSettled.prototype._setResultAt = setSettledResult;
 
 /**
 `RSVP.allSettled` is similar to `RSVP.all`, but instead of implementing
@@ -1666,7 +1663,7 @@ states of the constituent promises.
 */
 
 function allSettled(entries, label) {
-  if (!isArray(entries)) {
+  if (!Array.isArray(entries)) {
     return Promise.reject(new TypeError("Promise.allSettled must be called with an array"), label);
   }
 
@@ -1847,7 +1844,7 @@ var HashSettled = function (_PromiseHash) {
   return HashSettled;
 }(PromiseHash);
 
-HashSettled.prototype._makeResult = makeSettledResult;
+HashSettled.prototype._setResultAt = setSettledResult;
 
 /**
   `RSVP.hashSettled` is similar to `RSVP.allSettled`, but takes an object
@@ -2050,12 +2047,49 @@ function defer(label) {
   return deferred;
 }
 
+function _possibleConstructorReturn$3(self, call) { if (!self) { throw new ReferenceError("this hasn't been initialised - super() hasn't been called"); } return call && (typeof call === "object" || typeof call === "function") ? call : self; }
+
+function _inherits$3(subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) Object.setPrototypeOf ? Object.setPrototypeOf(subClass, superClass) : subClass.__proto__ = superClass; }
+
+var MapEnumerator = function (_Enumerator) {
+  _inherits$3(MapEnumerator, _Enumerator);
+
+  function MapEnumerator(Constructor, entries, mapFn, label) {
+    return _possibleConstructorReturn$3(this, _Enumerator.call(this, Constructor, entries, true, label, mapFn));
+  }
+
+  MapEnumerator.prototype._init = function _init(Constructor, input, bool, label, mapFn) {
+    var len = input.length || 0;
+    this.length = len;
+    this._remaining = len;
+    this._result = new Array(len);
+    this._mapFn = mapFn;
+
+    this._enumerate(input);
+  };
+
+  MapEnumerator.prototype._setResultAt = function _setResultAt(state, i, value, firstPass) {
+    if (firstPass) {
+      var val = tryCatch(this._mapFn)(value, i);
+      if (val === TRY_CATCH_ERROR) {
+        this._settledAt(REJECTED, i, val.error, false);
+      } else {
+        this._eachEntry(val, i, false);
+      }
+    } else {
+      this._remaining--;
+      this._result[i] = value;
+    }
+  };
+
+  return MapEnumerator;
+}(Enumerator);
+
 /**
- `RSVP.map` is similar to JavaScript's native `map` method, except that it
-  waits for all promises to become fulfilled before running the `mapFn` on
-  each item in given to `promises`. `RSVP.map` returns a promise that will
-  become fulfilled with the result of running `mapFn` on the values the promises
-  become fulfilled with.
+ `RSVP.map` is similar to JavaScript's native `map` method. `mapFn` is eagerly called
+  meaning that as soon as any promise resolves its value will be passed to `mapFn`.
+  `RSVP.map` returns a promise that will become fulfilled with the result of running
+  `mapFn` on the values the promises become fulfilled with.
 
   For example:
 
@@ -2128,8 +2162,10 @@ function defer(label) {
    The promise will be rejected if any of the given `promises` become rejected.
   @static
 */
+
+
 function map(promises, mapFn, label) {
-  if (!isArray(promises)) {
+  if (!Array.isArray(promises)) {
     return Promise.reject(new TypeError("RSVP.map must be called with an array"), label);
   }
 
@@ -2137,16 +2173,7 @@ function map(promises, mapFn, label) {
     return Promise.reject(new TypeError("RSVP.map expects a function as a second argument"), label);
   }
 
-  return Promise.all(promises, label).then(function (values) {
-    var length = values.length;
-    var results = new Array(length);
-
-    for (var i = 0; i < length; i++) {
-      results[i] = mapFn(values[i]);
-    }
-
-    return Promise.all(results, label);
-  });
+  return new MapEnumerator(Promise, promises, mapFn, label).promise;
 }
 
 /**
@@ -2180,12 +2207,65 @@ function reject$2(reason, label) {
   return Promise.reject(reason, label);
 }
 
+function _possibleConstructorReturn$4(self, call) { if (!self) { throw new ReferenceError("this hasn't been initialised - super() hasn't been called"); } return call && (typeof call === "object" || typeof call === "function") ? call : self; }
+
+function _inherits$4(subClass, superClass) { if (typeof superClass !== "function" && superClass !== null) { throw new TypeError("Super expression must either be null or a function, not " + typeof superClass); } subClass.prototype = Object.create(superClass && superClass.prototype, { constructor: { value: subClass, enumerable: false, writable: true, configurable: true } }); if (superClass) Object.setPrototypeOf ? Object.setPrototypeOf(subClass, superClass) : subClass.__proto__ = superClass; }
+
+var EMPTY_OBJECT = {};
+
+var FilterEnumerator = function (_Enumerator) {
+  _inherits$4(FilterEnumerator, _Enumerator);
+
+  function FilterEnumerator(Constructor, entries, filterFn, label) {
+    return _possibleConstructorReturn$4(this, _Enumerator.call(this, Constructor, entries, true, label, filterFn));
+  }
+
+  FilterEnumerator.prototype._init = function _init(Constructor, input, bool, label, filterFn) {
+    var len = input.length || 0;
+    this.length = len;
+    this._remaining = len;
+
+    this._result = new Array(len);
+    this._filterFn = filterFn;
+
+    this._enumerate(input);
+  };
+
+  FilterEnumerator.prototype._checkFullfillment = function _checkFullfillment() {
+    if (this._remaining === 0) {
+      this._result = this._result.filter(function (val) {
+        return val !== EMPTY_OBJECT;
+      });
+      fulfill(this.promise, this._result);
+    }
+  };
+
+  FilterEnumerator.prototype._setResultAt = function _setResultAt(state, i, value, firstPass) {
+    if (firstPass) {
+      this._result[i] = value;
+      var val = tryCatch(this._filterFn)(value, i);
+      if (val === TRY_CATCH_ERROR) {
+        this._settledAt(REJECTED, i, val.error, false);
+      } else {
+        this._eachEntry(val, i, false);
+      }
+    } else {
+      this._remaining--;
+      if (value !== true) {
+        this._result[i] = EMPTY_OBJECT;
+      }
+    }
+  };
+
+  return FilterEnumerator;
+}(Enumerator);
+
 /**
- `RSVP.filter` is similar to JavaScript's native `filter` method, except that it
-  waits for all promises to become fulfilled before running the `filterFn` on
-  each item in given to `promises`. `RSVP.filter` returns a promise that will
-  become fulfilled with the result of running `filterFn` on the values the
-  promises become fulfilled with.
+ `RSVP.filter` is similar to JavaScript's native `filter` method.
+ `filterFn` is eagerly called meaning that as soon as any promise
+  resolves its value will be passed to `filterFn`. `RSVP.filter` returns
+  a promise that will become fulfilled with the result of running
+  `filterFn` on the values the promises become fulfilled with.
 
   For example:
 
@@ -2266,18 +2346,8 @@ function reject$2(reason, label) {
   @return {Promise}
 */
 
-function resolveAll(promises, label) {
-  return Promise.all(promises, label);
-}
-
-function resolveSingle(promise, label) {
-  return Promise.resolve(promise, label).then(function (promises) {
-    return resolveAll(promises, label);
-  });
-}
-
 function filter(promises, filterFn, label) {
-  if (!isArray(promises) && !(isObject(promises) && promises.then !== undefined)) {
+  if (!Array.isArray(promises) && !(isObject(promises) && promises.then !== undefined)) {
     return Promise.reject(new TypeError("RSVP.filter must be called with an array or promise"), label);
   }
 
@@ -2285,30 +2355,8 @@ function filter(promises, filterFn, label) {
     return Promise.reject(new TypeError("RSVP.filter expects function as a second argument"), label);
   }
 
-  var promise = isArray(promises) ? resolveAll(promises, label) : resolveSingle(promises, label);
-  return promise.then(function (values) {
-    var length = values.length;
-    var filtered = new Array(length);
-
-    for (var i = 0; i < length; i++) {
-      filtered[i] = filterFn(values[i]);
-    }
-
-    return resolveAll(filtered, label).then(function (filtered) {
-      var results = new Array(length);
-      var newLength = 0;
-
-      for (var _i = 0; _i < length; _i++) {
-        if (filtered[_i]) {
-          results[newLength] = values[_i];
-          newLength++;
-        }
-      }
-
-      results.length = newLength;
-
-      return results;
-    });
+  return Promise.resolve(promises, label).then(function (promises) {
+    return new FilterEnumerator(Promise, promises, filterFn, label).promise;
   });
 }
 
