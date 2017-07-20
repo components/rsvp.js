@@ -3,7 +3,7 @@
  * @copyright Copyright (c) 2016 Yehuda Katz, Tom Dale, Stefan Penner and contributors
  * @license   Licensed under MIT license
  *            See https://raw.githubusercontent.com/tildeio/rsvp.js/master/LICENSE
- * @version   4.0.0
+ * @version   4.0.1
  */
 
 function callbacksFor(object) {
@@ -2251,7 +2251,7 @@ var FilterEnumerator = function (_Enumerator) {
       }
     } else {
       this._remaining--;
-      if (value !== true) {
+      if (!value) {
         this._result[i] = EMPTY_OBJECT;
       }
     }
